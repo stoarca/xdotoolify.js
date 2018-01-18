@@ -55,15 +55,15 @@ await page.X
 
 ### Xdotoolify(page)
 
-  - `page` is a selenium `[ThenableWebDriver][1]` tied to Firefox
+  - `page` is a selenium `[ThenableWebDriver]`[1] tied to Firefox
 
 This will add a `.X` property to `page` that exposes methods for manipulating
-input.
+input in that Firefox instance.
 
 ### page.X.mousemove(selector, relpos)
 
   - `selector` is one of:
-    - a css selector
+    - a css selector e.g. `'.article > .date'`
     - an array where the first element is a css selector and the rest of the elements are integers. E.g. `['.question', 2]` would select the second of the elements with class `question` (note that this is different than the `:nth-child` selector)
     - an object with `x` and `y` properties. This is interpreted as an absolute screen position.
     - an object with `relx` and `rely` properties. This is interpreted as a position relative to where the mouse is now.
@@ -129,11 +129,15 @@ This method queues up a set of characters to be typed the next time `page.X.do()
 
 ### page.X.autoClick(selector, ...), page.X.autoDrag(selector, ...), page.X.autoKey(selector, ...), page.X.autoType(selector, ...)
 
-These are convenience methods to specify a `selector` target on which to apply the operation. For example, `page.X.autoType('#myemail', 'me@example.com')` will first queue up a `page.X.click()` to the bottom right of the `#myemail` element before typing in `me@example.com`.
+  - `selector` is the same as in `page.X.mousemove()`
+
+These are convenience methods to specify a `selector` target on which to apply the operation. The arguments following the first argument are the same as in the non-`auto` version of the command. For example, `page.X.autoType('#myemail', 'me@example.com')` will first queue up a `page.X.click()` to the bottom right of the `#myemail` element before typing in `me@example.com`.
 
 ### page.X.sleep(milliseconds)
 
   - `milliseconds` is the number of milliseconds to sleep for
+
+Returns `page.X` for easy chaining.
 
 This method will queue up a pause in between two commands. Useful when you need
 to wait for the result of an action. For example:
