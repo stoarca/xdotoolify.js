@@ -64,7 +64,7 @@ input in that Firefox instance.
 
   - `selector` is one of:
     - a css selector e.g. `'.article > .date'`
-    - an array where the first element is a css selector and the rest of the elements are integers. E.g. `['.question', 2]` would select the second of the elements with class `question` (note that this is different than the `:nth-child` selector)
+    - an array where the first element is a css selector and the second element is an integer. E.g. `['.question', 2]` would select the second of the elements with class `question` (note that this is different than the `:nth-child` selector)
     - an object with `x` and `y` properties. This is interpreted as an absolute screen position.
     - an object with `relx` and `rely` properties. This is interpreted as a position relative to where the mouse is now.
   - `relpos` *(optional: defaults to `'center'`)* is one of `'center'` or `'bottomright'`, ignored if `selector` is not a css selector or array. If `'center'`, it will move the mouse to the center of the element represented by `selector`. If `'bottomright'`, it will move the mouse to the bottom right of the element (useful for positioning the cursor at the end of the text of an input element, for example)
