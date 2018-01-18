@@ -55,7 +55,7 @@ await page.X
 
 ### Xdotoolify(page)
 
-  - `page` is a selenium `[ThenableWebDriver]`[1] tied to Firefox
+  - `page` is a selenium [`ThenableWebDriver`][1] tied to Firefox
 
 This will add a `.X` property to `page` that exposes methods for manipulating
 input in that Firefox instance.
