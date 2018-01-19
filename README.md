@@ -40,8 +40,8 @@ var page = await new Builder()
     .forBrowser('firefox')
     .setFirefoxOptions(firefoxOpts)
     .build();
-await page.manage().window().setSize(1280, 1024);
 Xdotoolify(page);
+await page.manage().window().setSize(1280, 1024);
 
 await page.X.autoClick('#button').do();
 await page.X
@@ -57,7 +57,10 @@ await page.X
 
   - `page` is a selenium [`ThenableWebDriver`][1] tied to Firefox
 
-This will add a `.X` property to `page` that exposes methods for manipulating
+Returns `undefined`.
+
+This method must be called immediately after calling selenium's `build()`.
+It will add a `.X` property to `page` that exposes methods for manipulating
 input in that Firefox instance.
 
 ### page.X.mousemove(selector, relpos)
@@ -71,7 +74,7 @@ input in that Firefox instance.
 
 Returns `page.X` for easy chaining.
 
-This method queues up a mousemove to the `selector`. The mousmove will happen
+This method queues up a mousemove to the `selector`. The mousemove will happen
 asynchronously when `page.X.do()` is next called.
 
 ### page.X.click(mouseButton)
