@@ -2,7 +2,7 @@ import childProcess from 'child_process';
 
 var _getElementRect = function(page, selector) {
   try {
-    return evaluate(page, function(_selector) {
+    return page.executeScript(function(_selector) {
       if (Array.isArray(_selector)) {
         var element = document.querySelectorAll(_selector[0]);
         var result = element[0].getBoundingClientRect();
@@ -45,7 +45,7 @@ var _getElementScreenRect = async function(page, selector) {
     console.warn(selector);
     throw e;
   }
-  return evaluate(page, function(_rect) {
+  return page.executeScript(function(_rect) {
     _rect.x += window.mozInnerScreenX;
     _rect.y += window.mozInnerScreenY;
     return _rect;
@@ -227,7 +227,12 @@ _Xdotoolify.prototype.do = async function() {
         } else if (op.relpos === 'bottomright') {
           pos = _bottomrightize(rect);
         }
-      } else if (op.selector.relx || op.selector.posy) {
+      } else if (op.selector.screenx || op.selector.screeny) {
+        pos = {
+          x: op.selector.screenx,
+          y: op.selector.screeny,
+        };
+      } else if (op.selector.relx || op.selector.rely) {
         pos = {
           x: this.page.xjsLastPos.x + (pos.relx || 0),
           y: this.page.xjsLastPos.y + (pos.rely || 0),
