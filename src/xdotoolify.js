@@ -38,7 +38,13 @@ var _getElementRect = function(page, selector) {
 
 var _getElementScreenRect = async function(page, selector) {
   // TODO: only works in firefox
-  var rect = await _getElementRect(page, selector);
+  try {
+    var rect = await _getElementRect(page, selector);
+  } catch (e) {
+    console.warn('getElementScreenRect failed for');
+    console.warn(selector);
+    throw e;
+  }
   return evaluate(page, function(_rect) {
     _rect.x += window.mozInnerScreenX;
     _rect.y += window.mozInnerScreenY;
@@ -195,7 +201,13 @@ _Xdotoolify.prototype.autoKey = function(selector, key) {
 _Xdotoolify.prototype.autoType = function(selector, text) {
   this.mousemove(selector, 'bottomright');
   this.click();
-  this.type(text);
+  var lines = text.toString().split('\n');
+  for (var i = 0; i < lines.length; ++i) {
+    if (i > 0) {
+      this.key('Return');
+    }
+    this.type(lines[i]);
+  }
   return this;
 };
 _Xdotoolify.prototype.do = async function() {
@@ -220,6 +232,13 @@ _Xdotoolify.prototype.do = async function() {
           x: this.page.xjsLastPos.x + (pos.relx || 0),
           y: this.page.xjsLastPos.y + (pos.rely || 0),
         };
+      } else {
+        pos = await this.page.executeScript(function(_pos) {
+          return {
+            x: _pos.x + window.mozInnerScreenX,
+            y: _pos.y + window.mozInnerScreenY,
+          };
+        }, pos);
       }
       // jitter when moving a mouse to the same location or it won't trigger
       if (!this.page.xjsLastPos ||
