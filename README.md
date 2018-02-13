@@ -71,7 +71,7 @@ input in that Firefox instance.
     - an object with `x` and `y` properties. This is interpreted as an absolute position within the window client area.
     - and object with `screenx` and `screeny` properties. This is interpreted as an absolute screen position.
     - an object with `relx` and `rely` properties. This is interpreted as a position relative to where the mouse is now.
-  - `relpos` *(optional: defaults to `'center'`)* is one of `'center'` or `'bottomright'`, ignored if `selector` is not a css selector or array. If `'center'`, it will move the mouse to the center of the element represented by `selector`. If `'bottomright'`, it will move the mouse to the bottom right of the element (useful for positioning the cursor at the end of the text of an input element, for example)
+  - `relpos` *(optional: defaults to `'center'`)* is one of `'center'`, `'topleft'`, `'topright'`, `'bottomleft'`, or `'bottomright'`, ignored if `selector` is not a css selector or array. If `'center'`, it will move the mouse to the center of the element represented by `selector`. If `'bottomright'`, it will move the mouse to the bottom right of the element (useful for positioning the cursor at the end of the text of an input element, for example)
 
 Returns `page.X` for easy chaining.
 

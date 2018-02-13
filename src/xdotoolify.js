@@ -58,13 +58,31 @@ var _sleep = function(time) {
   });
 };
 
-var _centerize = function(rect) {
+var centerize = function(rect) {
   return {
     x: rect.x + rect.width / 2,
     y: rect.y + rect.height / 2,
   };
 };
-var _bottomrightize = function(rect) {
+var topleftize = function(rect) {
+  return {
+    x: rect.x + 1,
+    y: rect.y + 1,
+  };
+};
+var toprightize = function(rect) {
+  return {
+    x: rect.x + rect.width - 17,
+    y: rect.y + 1,
+  };
+};
+var bottomleftize = function(rect) {
+  return {
+    x: rect.x + 1,
+    y: rect.y + rect.height - 17,
+  };
+};
+var bottomrightize = function(rect) {
   return {
     // -15 in order to avoid scrollbars and resize scrubbers on textareas
     x: rect.x + rect.width - 17,
@@ -73,9 +91,13 @@ var _bottomrightize = function(rect) {
 };
 
 var RELATIVE_POSITION_MAPPING = {
-  center: true,
-  bottomright: true,
+  center: centerize,
+  topleft: topleftize,
+  topright: toprightize,
+  bottomleft: bottomleftize,
+  bottomright: bottomrightize,
 };
+
 var MOUSE_BUTTON_MAPPING = {
   left: 1,
   middle: 2,
@@ -222,11 +244,7 @@ _Xdotoolify.prototype.do = async function() {
       var pos = op.selector;
       if (typeof op.selector === 'string' || Array.isArray(op.selector)) {
         var rect = await _getElementScreenRect(this.page, op.selector);
-        if (op.relpos === 'center') {
-          pos = _centerize(rect);
-        } else if (op.relpos === 'bottomright') {
-          pos = _bottomrightize(rect);
-        }
+        pos = RELATIVE_POSITION_MAPPING[op.relpos](rect);
       } else if (op.selector.screenx || op.selector.screeny) {
         pos = {
           x: op.selector.screenx,
