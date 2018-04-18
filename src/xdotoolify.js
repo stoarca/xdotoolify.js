@@ -1,8 +1,8 @@
 import childProcess from 'child_process';
 
-var _getElementRect = function(page, selector) {
+var _getElementRect = async function(page, selector) {
   try {
-    return page.executeScript(function(_selector) {
+    return await page.executeScript(function(_selector) {
       if (Array.isArray(_selector)) {
         var element = document.querySelectorAll(_selector[0]);
         var result = element[0].getBoundingClientRect();
