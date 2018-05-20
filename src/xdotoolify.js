@@ -312,10 +312,10 @@ _Xdotoolify.prototype.do = async function() {
 };
 var lastWindow = null;
 _Xdotoolify.prototype._do = async function(command) {
-  if (lastWindow !== this.page.xWindowId) {
-    childProcess.execSync('xdotool windowraise ' + this.page.xWindowId);
-    childProcess.execSync('xdotool windowfocus ' + this.page.xWindowId);
-    lastWindow = this.page.xWindowId;
+  if (lastWindow !== this.xWindowId) {
+    childProcess.execSync('xdotool windowraise ' + this.xWindowId);
+    childProcess.execSync('xdotool windowfocus ' + this.xWindowId);
+    lastWindow = this.xWindowId;
     await _sleep(500);
   }
   if (command) {
