@@ -1,20 +1,56 @@
 import childProcess from 'child_process';
 
-var _getElementRect = async function(page, selector) {
+var _getElementAndBrowserRect = async function(page, selector) {
   try {
     return await page.executeScript(function(_selector) {
+      var intersectRects = function(a, b) {
+        if (a.x > b.x + b.width ||
+            b.x > a.x + a.width ||
+            a.y > b.y + b.height ||
+            b.y > a.y + a.height) {
+          return null;
+        }
+        var x = Math.max(a.x, b.x);
+        var y = Math.max(a.y, b.y);
+        return {
+          x: x,
+          y: y,
+          width: Math.min(a.x + a.width, b.x + b.width) - x,
+          height: Math.min(a.y + a.height, b.y + b.height) - y,
+        };
+      }
+      getElementVisibleBoundingRect = function(element) {
+        var rect = element.getBoundingClientRect();
+        while (element.parentElement) {
+          element = element.parentElement;
+          var style = window.getComputedStyle(element);
+          var overflow = style.overflow + style.overflowX + style.overflowY;
+          if (/auto|scroll|hidden/.test(overflow)) {
+            rect = intersectRects(rect, element.getBoundingClientRect());
+            if (!rect) {
+              return {
+                x: 1000000,
+                y: 1000000,
+                width: 0,
+                height: 0,
+              };
+            }
+          }
+        }
+        return rect;
+      };
       if (Array.isArray(_selector)) {
         var element = document.querySelectorAll(_selector[0]);
-        var result = element[0].getBoundingClientRect();
+        var result = getElementVisibleBoundingRect(element[0]);
         for (var i = 1; i < _selector.length; ++i) {
           if (Number.isInteger(_selector[i])) {
             element = element[_selector[i]];
-            result = element.getBoundingClientRect();
+            result = getElementVisibleBoundingRect(element);
           } else {
             var subDoc =
                 element.contentDocument || element.contentWindow.document;
             element = subDoc.querySelectorAll(_selector[i]);
-            var subResult = element[0].getBoundingClientRect();
+            var subResult = getElementVisibleBoundingRect(element[0]);
             result = {
               x: result.left + subResult.left,
               y: result.top + subResult.top,
@@ -25,9 +61,17 @@ var _getElementRect = async function(page, selector) {
         }
       } else {
         var element = document.querySelector(_selector);
-        var result = element.getBoundingClientRect();
+        var result = getElementVisibleBoundingRect(element);
       }
-      return result;
+      return {
+        rect: result,
+        window: {
+          x: window.screenX,
+          y: window.screenY,
+          width: window.outerWidth,
+          height: window.outerHeight,
+        }
+      };
     }, selector);
   } catch (e) {
     console.warn('getElementRect failed for');
@@ -36,20 +80,20 @@ var _getElementRect = async function(page, selector) {
   }
 };
 
-var _getElementScreenRect = async function(page, selector) {
+var _getElementAndBrowserScreenRect = async function(page, selector) {
   // TODO: only works in firefox
   try {
-    var rect = await _getElementRect(page, selector);
+    var ret = await _getElementAndBrowserRect(page, selector);
   } catch (e) {
     console.warn('getElementScreenRect failed for');
     console.warn(selector);
     throw e;
   }
-  return page.executeScript(function(_rect) {
-    _rect.x += window.mozInnerScreenX;
-    _rect.y += window.mozInnerScreenY;
-    return _rect;
-  }, rect);
+  return page.executeScript(function(_ret) {
+    _ret.rect.x += window.mozInnerScreenX;
+    _ret.rect.y += window.mozInnerScreenY;
+    return _ret;
+  }, ret);
 };
 
 var _sleep = function(time) {
@@ -244,8 +288,23 @@ _Xdotoolify.prototype.do = async function() {
       } else if (op.type === 'mousemove') {
         var pos = op.selector;
         if (typeof op.selector === 'string' || Array.isArray(op.selector)) {
-          var rect = await _getElementScreenRect(this.page, op.selector);
-          pos = RELATIVE_POSITION_MAPPING[op.relpos](rect);
+          var ret = await _getElementAndBrowserScreenRect(
+            this.page, op.selector
+          );
+          pos = RELATIVE_POSITION_MAPPING[op.relpos](ret.rect);
+          if (pos.x < ret.window.x ||
+              pos.x > ret.window.x + ret.window.width ||
+              pos.y < ret.window.y ||
+              pos.y > ret.window.y + ret.window.height) {
+            throw new Error(
+              'The pos for ' +
+              op.selector +
+              ' ended up outside of window. ' +
+              JSON.stringify(pos) +
+              ' was not inside ' +
+              JSON.stringify(ret.window)
+            );
+          }
         } else if (op.selector.screenx || op.selector.screeny) {
           pos = {
             x: op.selector.screenx,
