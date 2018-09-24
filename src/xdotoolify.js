@@ -76,6 +76,12 @@ var _getElementAndBrowserRect = async function(page, selector) {
   } catch (e) {
     console.warn('getElementRect failed for');
     console.warn(selector);
+    try {
+      var lp = require('long-promise2');
+      console.log(lp.getLongStack(e));
+    } catch (e) {
+      // intentionally skip, long-promise2 optional
+    }
     throw e;
   }
 };
