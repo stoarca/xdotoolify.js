@@ -66,10 +66,10 @@ var _getElementAndBrowserRect = async function(page, selector) {
       return {
         rect: result,
         window: {
-          x: window.screenX,
-          y: window.screenY,
-          width: window.outerWidth,
-          height: window.outerHeight,
+          x: window.mozInnerScreenX,
+          y: window.mozInnerScreenY,
+          width: window.innerWidth,
+          height: window.innerHeight,
         }
       };
     }, selector);
