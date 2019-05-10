@@ -264,14 +264,20 @@ _Xdotoolify.prototype.autoDrag = function(sel1, sel2, mouseButton) {
   this.drag(sel2, mouseButton);
   return this;
 };
-_Xdotoolify.prototype.autoKey = function(selector, key) {
-  this.mousemove(selector, 'bottomright');
+_Xdotoolify.prototype.autoKey = function(selector, key, relpos) {
+  if (!relpos) {
+    relpos = 'bottomright';
+  }
+  this.mousemove(selector, relpos);
   this.click();
   this.key(key);
   return this;
 };
-_Xdotoolify.prototype.autoType = function(selector, text) {
-  this.mousemove(selector, 'bottomright');
+_Xdotoolify.prototype.autoType = function(selector, text, relpos) {
+  if (!relpos) {
+    relpos = 'bottomright'
+  }
+  this.mousemove(selector, relpos);
   this.click();
   var lines = text.toString().split('\n');
   for (var i = 0; i < lines.length; ++i) {
