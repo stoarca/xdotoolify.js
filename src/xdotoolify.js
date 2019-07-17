@@ -87,19 +87,46 @@ var _getElementAndBrowserRect = async function(page, selector) {
 };
 
 var _getElementAndBrowserScreenRect = async function(page, selector) {
-  // TODO: only works in firefox
+  let ret = null;
+
   try {
-    var ret = await _getElementAndBrowserRect(page, selector);
+    ret = await _getElementAndBrowserRect(page, selector);
   } catch (e) {
     console.warn('getElementScreenRect failed for');
     console.warn(selector);
     throw e;
   }
+
   return page.executeScript(function(_ret) {
     _ret.rect.x += window.mozInnerScreenX;
     _ret.rect.y += window.mozInnerScreenY;
     return _ret;
   }, ret);
+};
+
+var waitUntilElementIsAvailable = async function(page, selector, timeout) {
+  var startTime = Date.now();
+  var curTime = Date.now();
+
+  while (curTime - startTime <= timeout) {
+    var element = await page.executeScript(function(_selector) {
+      var elem = null;
+      if (Array.isArray(_selector)) {
+        elem = document.querySelectorAll(_selector[0]);
+      }
+      else {
+        elem = document.querySelector(_selector);
+      }
+      return elem;
+    }, selector);
+    if (element != null) break;
+    await _sleep(50);
+    curTime = Date.now();
+  }
+  if (element) {
+    return true;
+  }
+  return false;
 };
 
 var _sleep = function(time) {
@@ -169,6 +196,7 @@ var _Xdotoolify = function(page) {
       y: 0,
     };
   }
+  this.defaultTimeout = 1000;
 };
 _Xdotoolify.prototype.focus = async function() {
   await this._do();
@@ -180,7 +208,7 @@ _Xdotoolify.prototype.sleep = function(ms) {
   });
   return this;
 };
-_Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep) {
+_Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep, timeout) {
   relpos = relpos || 'center';
   if (!RELATIVE_POSITION_MAPPING[relpos.toLowerCase()]) {
     throw new Error('Unknown relative position ' + relpos);
@@ -190,6 +218,7 @@ _Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep) {
     selector: selector,
     relpos: relpos.toLowerCase(),
     twoStep: twoStep || false,
+    timeout: timeout || this.defaultTimeout
   });
   return this;
 };
@@ -234,9 +263,9 @@ _Xdotoolify.prototype.wheelup = function() {
   this.click('wheelup');
   return this;
 };
-_Xdotoolify.prototype.drag = function(selector, mouseButton) {
+_Xdotoolify.prototype.drag = function(selector, mouseButton, timeout) {
   this.mousedown(mouseButton);
-  this.mousemove(selector, 'center', true);
+  this.mousemove(selector, 'center', true, timeout || this.defaultTimeout);
   this.mouseup(mouseButton);
   return this;
 };
@@ -254,30 +283,30 @@ _Xdotoolify.prototype.type = function(text) {
   });
   return this;
 };
-_Xdotoolify.prototype.autoClick = function(selector, mouseButton) {
-  this.mousemove(selector);
+_Xdotoolify.prototype.autoClick = function(selector, mouseButton, timeout) {
+  this.mousemove(selector, null, null, timeout || this.defaultTimeout);
   this.click(mouseButton);
   return this;
 };
-_Xdotoolify.prototype.autoDrag = function(sel1, sel2, mouseButton) {
-  this.mousemove(sel1);
+_Xdotoolify.prototype.autoDrag = function(sel1, sel2, mouseButton, timeout) {
+  this.mousemove(sel1, null, null, timeout || this.defaultTimeout);
   this.drag(sel2, mouseButton);
   return this;
 };
-_Xdotoolify.prototype.autoKey = function(selector, key, relpos) {
+_Xdotoolify.prototype.autoKey = function(selector, key, relpos, timeout) {
   if (!relpos) {
     relpos = 'bottomright';
   }
-  this.mousemove(selector, relpos);
+  this.mousemove(selector, relpos, null, timeout || this.defaultTimeout);
   this.click();
   this.key(key);
   return this;
 };
-_Xdotoolify.prototype.autoType = function(selector, text, relpos) {
+_Xdotoolify.prototype.autoType = function(selector, text, relpos, timeout) {
   if (!relpos) {
     relpos = 'bottomright'
   }
-  this.mousemove(selector, relpos);
+  this.mousemove(selector, relpos, null, timeout || this.defaultTimeout);
   this.click();
   var lines = text.toString().split('\n');
   for (var i = 0; i < lines.length; ++i) {
@@ -298,8 +327,15 @@ _Xdotoolify.prototype.do = async function() {
         commandArr = [];
         await _sleep(op.ms);
       } else if (op.type === 'mousemove') {
+        await this._do(commandArr.join(' '));
+        commandArr = [];
+
         var pos = op.selector;
         if (typeof op.selector === 'string' || Array.isArray(op.selector)) {
+          let timeout = op.timeout || this.defaultTimeout;
+          if (timeout) {
+            await waitUntilElementIsAvailable(this.page, op.selector, timeout);
+          }
           var ret = await _getElementAndBrowserScreenRect(
             this.page, op.selector
           );
@@ -377,7 +413,9 @@ _Xdotoolify.prototype.do = async function() {
       }
     }
     if (commandArr.length) {
-      await this._do(commandArr.join(' '));
+      for(let i = 0; i < commandArr.length; i ++) {
+        await this._do(commandArr[i]);
+      }
     }
   } finally {
     await _sleep(50);
@@ -394,7 +432,7 @@ _Xdotoolify.prototype._do = async function(command) {
   }
   if (command) {
     //console.log('command is ' + command);
-    childProcess.execSync('xdotool ' + command);
+    return await childProcess.execSync('xdotool ' + command);
   }
 };
 

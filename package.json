@@ -14,8 +14,7 @@
   },
   "author": "Sergiu Toarca",
   "license": "MIT",
-  "dependencies": {
-  },
+  "dependencies": {},
   "devDependencies": {
     "babel-cli": "6.23.0",
     "babel-plugin-transform-object-rest-spread": "6.23.0",
@@ -26,4 +25,3 @@
     "long-promise2": "^1.0.0"
   }
 }
-
