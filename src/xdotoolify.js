@@ -63,6 +63,10 @@ var _getElementAndBrowserRect = async function(page, selector) {
         var element = document.querySelector(_selector);
         var result = getElementVisibleBoundingRect(element);
       }
+
+      if (element == null || type(element) == NodeList && element.length == 0) {
+        return null;
+      }
       return {
         rect: result,
         window: {
@@ -86,14 +90,30 @@ var _getElementAndBrowserRect = async function(page, selector) {
   }
 };
 
-var _getElementAndBrowserScreenRect = async function(page, selector) {
+var _getElementAndBrowserScreenRect = async function(
+  page,
+  selector,
+  timeout = 10000,
+  starttime = Date.now()
+) {
   // TODO: only works in firefox
   try {
     var ret = await _getElementAndBrowserRect(page, selector);
   } catch (e) {
     console.warn('getElementScreenRect failed for');
     console.warn(selector);
-    throw e;
+    if (Date.now() - starttime < timeout) { // Intentionally eat error
+      await _sleep(50);
+      return _getElementAndBrowserScreenRect(
+        page,
+        selector,
+        timeout,
+        starttime
+      );
+    }
+    else {
+      throw e;
+    }
   }
   return page.executeScript(function(_ret) {
     _ret.rect.x += window.mozInnerScreenX;
@@ -180,7 +200,7 @@ _Xdotoolify.prototype.sleep = function(ms) {
   });
   return this;
 };
-_Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep) {
+_Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep, timeout = 10000) {
   relpos = relpos || 'center';
   if (!RELATIVE_POSITION_MAPPING[relpos.toLowerCase()]) {
     throw new Error('Unknown relative position ' + relpos);
@@ -190,6 +210,7 @@ _Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep) {
     selector: selector,
     relpos: relpos.toLowerCase(),
     twoStep: twoStep || false,
+    timeout: timeout
   });
   return this;
 };
@@ -234,9 +255,9 @@ _Xdotoolify.prototype.wheelup = function() {
   this.click('wheelup');
   return this;
 };
-_Xdotoolify.prototype.drag = function(selector, mouseButton) {
+_Xdotoolify.prototype.drag = function(selector, mouseButton, timeout = 10000) {
   this.mousedown(mouseButton);
-  this.mousemove(selector, 'center', true);
+  this.mousemove(selector, 'center', true, timeout);
   this.mouseup(mouseButton);
   return this;
 };
@@ -254,8 +275,8 @@ _Xdotoolify.prototype.type = function(text) {
   });
   return this;
 };
-_Xdotoolify.prototype.autoClick = function(selector, mouseButton) {
-  this.mousemove(selector);
+_Xdotoolify.prototype.autoClick = function(selector, mouseButton, timeout = 10000) {
+  this.mousemove(selector, null, null, timeout);
   this.click(mouseButton);
   return this;
 };
@@ -264,20 +285,20 @@ _Xdotoolify.prototype.autoDrag = function(sel1, sel2, mouseButton) {
   this.drag(sel2, mouseButton);
   return this;
 };
-_Xdotoolify.prototype.autoKey = function(selector, key, relpos) {
+_Xdotoolify.prototype.autoKey = function(selector, key, relpos, timeout = 10000) {
   if (!relpos) {
     relpos = 'bottomright';
   }
-  this.mousemove(selector, relpos);
+  this.mousemove(selector, relpos, null, timeout);
   this.click();
   this.key(key);
   return this;
 };
-_Xdotoolify.prototype.autoType = function(selector, text, relpos) {
+_Xdotoolify.prototype.autoType = function(selector, text, relpos, timeout = 10000) {
   if (!relpos) {
     relpos = 'bottomright'
   }
-  this.mousemove(selector, relpos);
+  this.mousemove(selector, relpos, null, timeout);
   this.click();
   var lines = text.toString().split('\n');
   for (var i = 0; i < lines.length; ++i) {
@@ -301,7 +322,7 @@ _Xdotoolify.prototype.do = async function() {
         var pos = op.selector;
         if (typeof op.selector === 'string' || Array.isArray(op.selector)) {
           var ret = await _getElementAndBrowserScreenRect(
-            this.page, op.selector
+            this.page, op.selector, op.timeout || 10000
           );
           pos = RELATIVE_POSITION_MAPPING[op.relpos](ret.rect);
           if (pos.x < ret.window.x ||
