@@ -63,6 +63,10 @@ var _getElementAndBrowserRect = async function(page, selector) {
         var element = document.querySelector(_selector);
         var result = getElementVisibleBoundingRect(element);
       }
+
+      if (element == null || type(element) == NodeList && element.length == 0) {
+        return null;
+      }
       return {
         rect: result,
         window: {
@@ -337,7 +341,7 @@ _Xdotoolify.prototype.do = async function() {
             await waitUntilElementIsAvailable(this.page, op.selector, timeout);
           }
           var ret = await _getElementAndBrowserScreenRect(
-            this.page, op.selector
+            this.page, op.selector, op.timeout || 10000
           );
           pos = RELATIVE_POSITION_MAPPING[op.relpos](ret.rect);
           if (pos.x < ret.window.x ||
