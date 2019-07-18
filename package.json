@@ -1,6 +1,6 @@
 {
   "name": "xdotoolify",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "xdotoolify simulates clicks and keystrokes in selenium in a way that is indistinguishable from a real user's actions",
   "main": "dist/xdotoolify.js",
   "scripts": {
@@ -14,8 +14,7 @@
   },
   "author": "Sergiu Toarca",
   "license": "MIT",
-  "dependencies": {
-  },
+  "dependencies": {},
   "devDependencies": {
     "babel-cli": "6.23.0",
     "babel-plugin-transform-object-rest-spread": "6.23.0",
@@ -26,4 +25,3 @@
     "long-promise2": "^1.0.0"
   }
 }
-
