@@ -320,104 +320,107 @@ _Xdotoolify.prototype.autoType = function(selector, text, relpos, timeout) {
   }
   return this;
 };
-_Xdotoolify.prototype.do = async function() {
-  try {
-    var commandArr = [];
-    for (var i = 0; i < this.operations.length; ++i) {
-      var op = this.operations[i];
-      if (op.type === 'sleep') {
-        await this._do(commandArr.join(' '));
-        commandArr = [];
-        await _sleep(op.ms);
-      } else if (op.type === 'mousemove') {
-        await this._do(commandArr.join(' '));
-        commandArr = [];
+_Xdotoolify.prototype.doWithThrow = async function() {
+  var commandArr = [];
+  for (var i = 0; i < this.operations.length; ++i) {
+    var op = this.operations[i];
+    if (op.type === 'sleep') {
+      await this._do(commandArr.join(' '));
+      commandArr = [];
+      await _sleep(op.ms);
+    } else if (op.type === 'mousemove') {
+      await this._do(commandArr.join(' '));
+      commandArr = [];
 
-        var pos = op.selector;
-        if (typeof op.selector === 'string' || Array.isArray(op.selector)) {
-          let timeout = op.timeout || this.defaultTimeout;
-          if (timeout) {
-            await waitUntilElementIsAvailable(this.page, op.selector, timeout);
-          }
-          var ret = await _getElementAndBrowserScreenRect(
-            this.page, op.selector
+      var pos = op.selector;
+      if (typeof op.selector === 'string' || Array.isArray(op.selector)) {
+        let timeout = op.timeout || this.defaultTimeout;
+        if (timeout) {
+          await waitUntilElementIsAvailable(this.page, op.selector, timeout);
+        }
+        var ret = await _getElementAndBrowserScreenRect(
+          this.page, op.selector
+        );
+        pos = RELATIVE_POSITION_MAPPING[op.relpos](ret.rect);
+        if (pos.x < ret.window.x ||
+            pos.x > ret.window.x + ret.window.width ||
+            pos.y < ret.window.y ||
+            pos.y > ret.window.y + ret.window.height) {
+          throw new Error(
+            'The pos for ' +
+            op.selector +
+            ' ended up outside of window. ' +
+            JSON.stringify(pos) +
+            ' was not inside ' +
+            JSON.stringify(ret.window)
           );
-          pos = RELATIVE_POSITION_MAPPING[op.relpos](ret.rect);
-          if (pos.x < ret.window.x ||
-              pos.x > ret.window.x + ret.window.width ||
-              pos.y < ret.window.y ||
-              pos.y > ret.window.y + ret.window.height) {
-            throw new Error(
-              'The pos for ' +
-              op.selector +
-              ' ended up outside of window. ' +
-              JSON.stringify(pos) +
-              ' was not inside ' +
-              JSON.stringify(ret.window)
-            );
-          }
-        } else if (op.selector.screenx || op.selector.screeny) {
-          pos = {
-            x: op.selector.screenx,
-            y: op.selector.screeny,
-          };
-        } else if (op.selector.relx || op.selector.rely) {
-          pos = {
-            x: this.page.xjsLastPos.x + (pos.relx || 0),
-            y: this.page.xjsLastPos.y + (pos.rely || 0),
-          };
-        } else {
-          pos = await this.page.executeScript(function(_pos) {
-            return {
-              x: _pos.x + window.mozInnerScreenX,
-              y: _pos.y + window.mozInnerScreenY,
-            };
-          }, pos);
         }
-        // jitter when moving a mouse to the same location or it won't trigger
-        if (!this.page.xjsLastPos ||
-            this.page.xjsLastPos.x === pos.x &&
-                this.page.xjsLastPos.y === pos.y) {
-          commandArr.push(`mousemove --sync ${pos.x - 1} ${pos.y}`);
-          await this._do(commandArr.join(' '));
-          await _sleep(50);
-          commandArr = [];
-        }
-        if (op.twoStep) {
-          // we issue two mousemove commands because firefox won't start a drag
-          // otherwise. We don't want to always do this because it adds some
-          // noise to the activity screenshots so they become not deterministic
-          var midPoint = {
-            x: (this.page.xjsLastPos.x + pos.x) / 2,
-            y: (this.page.xjsLastPos.y + pos.y) / 2,
+      } else if (op.selector.screenx || op.selector.screeny) {
+        pos = {
+          x: op.selector.screenx,
+          y: op.selector.screeny,
+        };
+      } else if (op.selector.relx || op.selector.rely) {
+        pos = {
+          x: this.page.xjsLastPos.x + (pos.relx || 0),
+          y: this.page.xjsLastPos.y + (pos.rely || 0),
+        };
+      } else {
+        pos = await this.page.executeScript(function(_pos) {
+          return {
+            x: _pos.x + window.mozInnerScreenX,
+            y: _pos.y + window.mozInnerScreenY,
           };
-          commandArr.push(`mousemove --sync ${midPoint.x} ${midPoint.y}`);
-          await this._do(commandArr.join(' '));
-          await _sleep(50);
-          commandArr = [];
-        }
-        commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
+        }, pos);
+      }
+      // jitter when moving a mouse to the same location or it won't trigger
+      if (!this.page.xjsLastPos ||
+          this.page.xjsLastPos.x === pos.x &&
+              this.page.xjsLastPos.y === pos.y) {
+        commandArr.push(`mousemove --sync ${pos.x - 1} ${pos.y}`);
         await this._do(commandArr.join(' '));
         await _sleep(50);
         commandArr = [];
-        this.page.xjsLastPos = pos;
-      } else if (op.type === 'click') {
-        commandArr.push(`click ${op.mouseButton}`);
-      } else if (op.type === 'mousedown') {
-        commandArr.push(`mousedown ${op.mouseButton}`);
-      } else if (op.type === 'mouseup') {
-        commandArr.push(`mouseup ${op.mouseButton}`);
-      } else if (op.type === 'key') {
-        commandArr.push(`key ${op.key}`);
-      } else if (op.type === 'type') {
-        commandArr.push(`type ${JSON.stringify(op.text)}`);
+      }
+      if (op.twoStep) {
+        // we issue two mousemove commands because firefox won't start a drag
+        // otherwise. We don't want to always do this because it adds some
+        // noise to the activity screenshots so they become not deterministic
+        var midPoint = {
+          x: (this.page.xjsLastPos.x + pos.x) / 2,
+          y: (this.page.xjsLastPos.y + pos.y) / 2,
+        };
+        commandArr.push(`mousemove --sync ${midPoint.x} ${midPoint.y}`);
         await this._do(commandArr.join(' '));
+        await _sleep(50);
         commandArr = [];
       }
-    }
-    if (commandArr.length) {
+      commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
       await this._do(commandArr.join(' '));
+      await _sleep(50);
+      commandArr = [];
+      this.page.xjsLastPos = pos;
+    } else if (op.type === 'click') {
+      commandArr.push(`click ${op.mouseButton}`);
+    } else if (op.type === 'mousedown') {
+      commandArr.push(`mousedown ${op.mouseButton}`);
+    } else if (op.type === 'mouseup') {
+      commandArr.push(`mouseup ${op.mouseButton}`);
+    } else if (op.type === 'key') {
+      commandArr.push(`key ${op.key}`);
+    } else if (op.type === 'type') {
+      commandArr.push(`type ${JSON.stringify(op.text)}`);
+      await this._do(commandArr.join(' '));
+      commandArr = [];
     }
+  }
+  if (commandArr.length) {
+    await this._do(commandArr.join(' '));
+  }
+}
+_Xdotoolify.prototype.do = async function() {
+  try {
+    return this.doWithThrow();
   } finally {
     await _sleep(50);
     this.operations = [];
