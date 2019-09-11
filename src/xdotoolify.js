@@ -41,6 +41,9 @@ var _getElementAndBrowserRect = async function(page, selector) {
       };
       if (Array.isArray(_selector)) {
         var element = document.querySelectorAll(_selector[0]);
+        if (!element) {
+          throw new Error(`Element selector "${_selector[0]}" not found`);
+        }
         var result = getElementVisibleBoundingRect(element[0]);
         for (var i = 1; i < _selector.length; ++i) {
           if (Number.isInteger(_selector[i])) {
@@ -50,6 +53,9 @@ var _getElementAndBrowserRect = async function(page, selector) {
             var subDoc =
                 element.contentDocument || element.contentWindow.document;
             element = subDoc.querySelectorAll(_selector[i]);
+            if (!element) {
+              throw new Error(`Element selector "${_selector[i]}" not found`);
+            }
             var subResult = getElementVisibleBoundingRect(element[0]);
             result = {
               x: result.left + subResult.left,
@@ -61,6 +67,9 @@ var _getElementAndBrowserRect = async function(page, selector) {
         }
       } else {
         var element = document.querySelector(_selector);
+        if (!element) {
+          throw new Error(`Element selector "${_selector}" not found`);
+        }
         var result = getElementVisibleBoundingRect(element);
       }
 
