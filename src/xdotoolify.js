@@ -210,9 +210,6 @@ var _Xdotoolify = function(page) {
   }
   this.defaultTimeout = 1000;
 };
-_Xdotoolify.prototype.focus = async function() {
-  await this._do();
-};
 _Xdotoolify.prototype.sleep = function(ms) {
   this.operations.push({
     type: 'sleep',
@@ -432,14 +429,19 @@ _Xdotoolify.prototype.do = async function() {
     this.operations = [];
   }
 };
+
 var lastWindow = null;
-_Xdotoolify.prototype._do = async function(command) {
+_Xdotoolify.prototype.focus = async function() {
   if (lastWindow !== this.xWindowId) {
     childProcess.execSync('xdotool windowraise ' + this.xWindowId);
     childProcess.execSync('xdotool windowfocus ' + this.xWindowId);
     lastWindow = this.xWindowId;
     await _sleep(500);
   }
+};
+
+_Xdotoolify.prototype._do = async function(command) {
+  await this.focus();
   if (command) {
     //console.log('command is ' + command);
     childProcess.execSync('xdotool ' + command);
