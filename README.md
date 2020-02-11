@@ -154,6 +154,23 @@ page.X
     .do();
 ```
 
+### page.X.sleepUntil(predicate, timeout)
+
+  - `predicate` is the async function that should return a boolean
+  - `timeout` is the number of milliseconds for how long to call the predicate until it's `true`. When exceeded, `Timeout exceeded` error is thrown
+
+Returns `page.X` for easy chaining.
+
+This method will call the predicate until it returns true or timeout is exceeded. Useful when you need
+to wait for the result of an action based on some condition. For example:
+
+```js
+page.X
+    .autoClick('#show-toggle-columns') // open an animated dialog
+    .sleepUntil(dialogAnimationIsCompleted()) // wait until dialog animation is completed
+    .autoClick('#dialog-button') // click dialog button
+    .do()
+```
 
 ### async page.X.do()
 

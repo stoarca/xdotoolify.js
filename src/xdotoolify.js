@@ -326,6 +326,35 @@ _Xdotoolify.prototype.autoType = function(selector, text, relpos, timeout) {
   }
   return this;
 };
+
+_Xdotoolify.prototype.sleepUntil = function(predicate, timeout) {
+  this.operations.push({
+    type: 'sleepUntil',
+    predicate: predicate,
+    timeout: timeout || 3000
+  });
+
+  return this;
+}
+
+const _sleepUntil = async function(predicate, timeout) {
+  let result = await predicate();
+  let expires = Date.now() + timeout;
+  const interval = 100;
+
+  while(!result) {
+    if (Date.now() > expires) {
+      throw 'Timeout exceeded';
+    }
+
+    await _sleep(interval);
+
+    result = await predicate();
+  }
+
+  return result;
+}
+
 _Xdotoolify.prototype.do = async function() {
   try {
     var commandArr = [];
@@ -388,7 +417,7 @@ _Xdotoolify.prototype.do = async function() {
           await this._do(commandArr.join(' '));
           await _sleep(50);
           commandArr = [];
-        }
+        } 
         if (op.twoStep) {
           // we issue two mousemove commands because firefox won't start a drag
           // otherwise. We don't want to always do this because it adds some
@@ -419,6 +448,10 @@ _Xdotoolify.prototype.do = async function() {
         commandArr.push(`type ${JSON.stringify(op.text)}`);
         await this._do(commandArr.join(' '));
         commandArr = [];
+      } else if (op.type === 'sleepUntil') {
+        await this._do(commandArr.join(' '));
+        commandArr = [];
+        await _sleepUntil(op.predicate, op.timeout);
       }
     }
     if (commandArr.length) {
