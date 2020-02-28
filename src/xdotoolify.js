@@ -453,7 +453,7 @@ _Xdotoolify.prototype.do = async function() {
                   '. Most recent value was ' + mostRecent
                 );
               }
-              await sleep(100);
+              await _sleep(100);
             }
           } else {
             await run();
