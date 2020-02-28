@@ -1,6 +1,6 @@
 {
   "name": "xdotoolify",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "xdotoolify simulates clicks and keystrokes in selenium in a way that is indistinguishable from a real user's actions",
   "main": "dist/xdotoolify.js",
   "scripts": {

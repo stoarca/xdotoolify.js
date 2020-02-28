@@ -217,6 +217,46 @@ _Xdotoolify.prototype.sleep = function(ms) {
   });
   return this;
 };
+_Xdotoolify.prototype.run = function(f, ...rest) {
+  this.operations.push({
+    type: 'run',
+    withPage: true,
+    lastArgCallback: false,
+    func: f,
+    args: rest,
+  });
+  return this;
+};
+_Xdotoolify.prototype.check = function(f, ...rest) {
+  this.operations.push({
+    type: 'run',
+    withPage: true,
+    lastArgCallback: true,
+    func: f,
+    args: rest,
+  });
+  return this;
+};
+_Xdotoolify.prototype.runWithoutPage = function(f, ...rest) {
+  this.operations.push({
+    type: 'run',
+    withPage: false,
+    lastArgCallback: false,
+    func: f,
+    args: rest,
+  });
+  return this;
+};
+_Xdotoolify.prototype.checkWithoutPage = function(f, ...rest) {
+  this.operations.push({
+    type: 'run',
+    withPage: false,
+    lastArgCallback: true,
+    func: f,
+    args: rest,
+  });
+  return this;
+};
 _Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep, timeout) {
   relpos = relpos || 'center';
   if (!RELATIVE_POSITION_MAPPING[relpos.toLowerCase()]) {
@@ -358,12 +398,37 @@ const _sleepUntil = async function(predicate, timeout) {
 _Xdotoolify.prototype.do = async function() {
   try {
     var commandArr = [];
-    for (var i = 0; i < this.operations.length; ++i) {
-      var op = this.operations[i];
+    let operations = this.operations;
+    this.operations = [];
+    for (var i = 0; i < operations.length; ++i) {
+      var op = operations[i];
       if (op.type === 'sleep') {
         await this._do(commandArr.join(' '));
         commandArr = [];
         await _sleep(op.ms);
+      } else if (op.type === 'run') {
+        await this._do(commandArr.join(' '));
+        commandArr = [];
+        let args = null;
+        if (op.withPage) {
+          args = [this.page, ...op.args];
+        } else {
+          args = [...op.args];
+        }
+        if (op.lastArgCallback) {
+          args.splice(args.length - 1, 1);
+        }
+        let ret = await op.func.apply(null, args);
+        if (op.lastArgCallback) {
+          let lastArg = op.args[op.args.length - 1];
+          if (lastArg.then) {
+            throw new Error(
+              'Check callbacks should be synchronous. ' +
+                  'Use multiple check calls instead.'
+            );
+          }
+          lastArg(ret);
+        }
       } else if (op.type === 'mousemove') {
         await this._do(commandArr.join(' '));
         commandArr = [];
@@ -417,7 +482,7 @@ _Xdotoolify.prototype.do = async function() {
           await this._do(commandArr.join(' '));
           await _sleep(50);
           commandArr = [];
-        } 
+        }
         if (op.twoStep) {
           // we issue two mousemove commands because firefox won't start a drag
           // otherwise. We don't want to always do this because it adds some
@@ -459,7 +524,6 @@ _Xdotoolify.prototype.do = async function() {
     }
   } finally {
     await _sleep(50);
-    this.operations = [];
   }
 };
 
