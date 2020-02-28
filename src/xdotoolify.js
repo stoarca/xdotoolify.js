@@ -249,6 +249,7 @@ _Xdotoolify.prototype.checkUntil = function(f, ...rest) {
     until: true,
     value: rest[rest.length - 1],
   });
+  return this;
 };
 _Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep, timeout) {
   relpos = relpos || 'center';
