@@ -1,112 +1,91 @@
 import childProcess from 'child_process';
 
 var _getElementAndBrowserRect = async function(page, selector) {
-  try {
-    return await page.executeScript(function(_selector) {
-      var intersectRects = function(a, b) {
-        if (a.x > b.x + b.width ||
-            b.x > a.x + a.width ||
-            a.y > b.y + b.height ||
-            b.y > a.y + a.height) {
-          return null;
-        }
-        var x = Math.max(a.x, b.x);
-        var y = Math.max(a.y, b.y);
-        return {
-          x: x,
-          y: y,
-          width: Math.min(a.x + a.width, b.x + b.width) - x,
-          height: Math.min(a.y + a.height, b.y + b.height) - y,
-        };
+  return await page.executeScript(function(_selector) {
+    var intersectRects = function(a, b) {
+      if (a.x > b.x + b.width ||
+          b.x > a.x + a.width ||
+          a.y > b.y + b.height ||
+          b.y > a.y + a.height) {
+        return null;
       }
-      getElementVisibleBoundingRect = function(element) {
-        var rect = element.getBoundingClientRect();
-        while (element.parentElement) {
-          element = element.parentElement;
-          var style = window.getComputedStyle(element);
-          var overflow = style.overflow + style.overflowX + style.overflowY;
-          if (/auto|scroll|hidden/.test(overflow)) {
-            rect = intersectRects(rect, element.getBoundingClientRect());
-            if (!rect) {
-              return {
-                x: 1000000,
-                y: 1000000,
-                width: 0,
-                height: 0,
-              };
-            }
-          }
-        }
-        return rect;
+      var x = Math.max(a.x, b.x);
+      var y = Math.max(a.y, b.y);
+      return {
+        x: x,
+        y: y,
+        width: Math.min(a.x + a.width, b.x + b.width) - x,
+        height: Math.min(a.y + a.height, b.y + b.height) - y,
       };
-      if (Array.isArray(_selector)) {
-        var element = document.querySelectorAll(_selector[0]);
-        if (!element) {
-          throw new Error(`Element selector "${_selector[0]}" not found`);
-        }
-        var result = getElementVisibleBoundingRect(element[0]);
-        for (var i = 1; i < _selector.length; ++i) {
-          if (Number.isInteger(_selector[i])) {
-            element = element[_selector[i]];
-            result = getElementVisibleBoundingRect(element);
-          } else {
-            var subDoc =
-                element.contentDocument || element.contentWindow.document;
-            element = subDoc.querySelectorAll(_selector[i]);
-            if (!element) {
-              throw new Error(`Element selector "${_selector[i]}" not found`);
-            }
-            var subResult = getElementVisibleBoundingRect(element[0]);
-            result = {
-              x: result.left + subResult.left,
-              y: result.top + subResult.top,
-              width: subResult.width,
-              height: subResult.height,
+    }
+    getElementVisibleBoundingRect = function(element) {
+      var rect = element.getBoundingClientRect();
+      while (element.parentElement) {
+        element = element.parentElement;
+        var style = window.getComputedStyle(element);
+        var overflow = style.overflow + style.overflowX + style.overflowY;
+        if (/auto|scroll|hidden/.test(overflow)) {
+          rect = intersectRects(rect, element.getBoundingClientRect());
+          if (!rect) {
+            return {
+              x: 1000000,
+              y: 1000000,
+              width: 0,
+              height: 0,
             };
           }
         }
-      } else {
-        var element = document.querySelector(_selector);
-        if (!element) {
-          throw new Error(`Element selector "${_selector}" not found`);
-        }
-        var result = getElementVisibleBoundingRect(element);
       }
-
-      return {
-        rect: result,
-        window: {
-          x: window.mozInnerScreenX,
-          y: window.mozInnerScreenY,
-          width: window.innerWidth,
-          height: window.innerHeight,
+      return rect;
+    };
+    if (Array.isArray(_selector)) {
+      var element = document.querySelectorAll(_selector[0]);
+      if (!element) {
+        throw new Error(`Element selector "${_selector[0]}" not found`);
+      }
+      var result = getElementVisibleBoundingRect(element[0]);
+      for (var i = 1; i < _selector.length; ++i) {
+        if (Number.isInteger(_selector[i])) {
+          element = element[_selector[i]];
+          result = getElementVisibleBoundingRect(element);
+        } else {
+          var subDoc =
+              element.contentDocument || element.contentWindow.document;
+          element = subDoc.querySelectorAll(_selector[i]);
+          if (!element) {
+            throw new Error(`Element selector "${_selector[i]}" not found`);
+          }
+          var subResult = getElementVisibleBoundingRect(element[0]);
+          result = {
+            x: result.left + subResult.left,
+            y: result.top + subResult.top,
+            width: subResult.width,
+            height: subResult.height,
+          };
         }
-      };
-    }, selector);
-  } catch (e) {
-    console.warn('getElementRect failed for');
-    console.warn(selector);
-    try {
-      var lp = require('long-promise2');
-      console.log(lp.getLongStack(e));
-    } catch (e) {
-      // intentionally skip, long-promise2 optional
+      }
+    } else {
+      var element = document.querySelector(_selector);
+      if (!element) {
+        throw new Error(`Element selector "${_selector}" not found`);
+      }
+      var result = getElementVisibleBoundingRect(element);
     }
-    throw e;
-  }
+
+    return {
+      rect: result,
+      window: {
+        x: window.mozInnerScreenX,
+        y: window.mozInnerScreenY,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }
+    };
+  }, selector);
 };
 
 var _getElementAndBrowserScreenRect = async function(page, selector) {
-  let ret = null;
-
-  try {
-    ret = await _getElementAndBrowserRect(page, selector);
-  } catch (e) {
-    console.warn('getElementScreenRect failed for');
-    console.warn(selector);
-    throw e;
-  }
-
+  let ret = await _getElementAndBrowserRect(page, selector);
   return page.executeScript(function(_ret) {
     _ret.rect.x += window.mozInnerScreenX;
     _ret.rect.y += window.mozInnerScreenY;
@@ -429,7 +408,7 @@ _Xdotoolify.prototype.do = async function() {
           } else {
             args = op.args;
           }
-          let run = async function() {
+          let run = async function(ignoreCallbackError) {
             let ret = await op.func.apply(null, args);
             if (op.callback) {
               if (op.callback.then) {
@@ -438,19 +417,29 @@ _Xdotoolify.prototype.do = async function() {
                       'Use multiple check() calls instead.'
                 );
               }
-              return op.callback(ret);
+              try {
+                return [ret, op.callback(ret)];
+              } catch (e) {
+                if (ignoreCallbackError) {
+                  return [ret, e];
+                } else {
+                  e.stack += '\nValue being checked: ' + JSON.stringify(ret);
+                  throw e;
+                }
+              }
             }
           }
           if (op.until) {
             let expires = Date.now() + 3000;
             let mostRecent = null;
-            while ((mostRecent = await run()) !== op.value) {
+            while ((mostRecent = await run(true)) !== op.value) {
               if (Date.now() > expires) {
                 throw new Error(
                   'Timeout exceeded waiting for ' + op.func.name +
                   ' called with ' + op.args.map(x => x.toString()).join(', ') +
-                  ' to be ' + op.value +
-                  '. Most recent value was ' + mostRecent
+                  ' to be ' + op.value + '.\n' +
+                  'Most recent value: ' + JSON.stringify(mostRecent[0]) + '\n' +
+                  'Most recent check result: ' + mostRecent[1] + '\n'
                 );
               }
               await _sleep(100);
