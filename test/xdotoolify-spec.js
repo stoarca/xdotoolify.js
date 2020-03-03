@@ -54,4 +54,14 @@ describe('xdotoolify', function() {
     expect(stack).toContain(' [{"a":5},6]\n');
     expect(stack).toContain(' 5\n');
   }));
+  it('should work with checkUntil', syncify(async function() {
+    let errorMsg = 'Nothing thrown';
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
+    try {
+      await page.X.checkUntil(goodFunc, x => x, 5).do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+    expect(errorMsg).toBe('Nothing thrown');
+  }));
 });

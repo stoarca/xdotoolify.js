@@ -432,7 +432,7 @@ _Xdotoolify.prototype.do = async function() {
           if (op.until) {
             let expires = Date.now() + 3000;
             let mostRecent = null;
-            while ((mostRecent = await run(true)) !== op.value) {
+            while ((mostRecent = await run(true))[0] !== op.value) {
               if (Date.now() > expires) {
                 throw new Error(
                   'Timeout exceeded waiting for ' + op.func.name +
@@ -445,7 +445,7 @@ _Xdotoolify.prototype.do = async function() {
               await _sleep(100);
             }
           } else {
-            await run();
+            await run(false);
           }
         } else if (op.type === 'mousemove') {
           await this._do(commandArr.join(' '));
