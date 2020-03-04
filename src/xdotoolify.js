@@ -358,7 +358,7 @@ const _sleepUntil = async function(predicate, timeout) {
 
   while(!result) {
     if (Date.now() > expires) {
-      throw 'Timeout exceeded';
+      throw new Error('Timeout exceeded');
     }
 
     await _sleep(interval);
@@ -432,7 +432,7 @@ _Xdotoolify.prototype.do = async function() {
           if (op.until) {
             let expires = Date.now() + 3000;
             let mostRecent = null;
-            while ((mostRecent = await run(true))[0] !== op.value) {
+            while ((mostRecent = await run(true))[1] !== op.value) {
               if (Date.now() > expires) {
                 throw new Error(
                   'Timeout exceeded waiting for ' + op.func.name +

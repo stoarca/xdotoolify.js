@@ -58,7 +58,7 @@ describe('xdotoolify', function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
     try {
-      await page.X.checkUntil(goodFunc, x => x, 5).do();
+      await page.X.checkUntil(goodFunc, x => x * 2, 10).do();
     } catch (e) {
       errorMsg = e.message;
     }
