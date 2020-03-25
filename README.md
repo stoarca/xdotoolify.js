@@ -67,7 +67,7 @@ input in that Firefox instance.
 
   - `selector` is one of:
     - a css selector e.g. `'.article > .date'`
-    - an array where the first element is a css selector and the second element is an integer. E.g. `['.question', 2]` would select the second of the elements with class `question` (note that this is different than the `:nth-child` selector)
+    - an array where the first element is a css selector and the second element is an integer. E.g. `['.question', 2]` would select the third of the elements with class `question` (note that this is different than the `:nth-child` selector)
     - an object with `x` and `y` properties. This is interpreted as an absolute position within the window client area.
     - and object with `screenx` and `screeny` properties. This is interpreted as an absolute screen position.
     - an object with `relx` and `rely` properties. This is interpreted as a position relative to where the mouse is now.
