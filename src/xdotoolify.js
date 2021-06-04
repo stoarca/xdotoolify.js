@@ -340,35 +340,6 @@ _Xdotoolify.prototype.autoType = function(selector, text, relpos, timeout) {
   return this;
 };
 
-// DEPRECATED
-_Xdotoolify.prototype.sleepUntil = function(predicate, timeout) {
-  this._addOperation({
-    type: 'sleepUntil',
-    predicate: predicate,
-    timeout: timeout || 3000
-  });
-
-  return this;
-}
-
-const _sleepUntil = async function(predicate, timeout) {
-  let result = await predicate();
-  let expires = Date.now() + timeout;
-  const interval = 100;
-
-  while(!result) {
-    if (Date.now() > expires) {
-      throw new Error('Timeout exceeded');
-    }
-
-    await _sleep(interval);
-
-    result = await predicate();
-  }
-
-  return result;
-}
-
 _Xdotoolify.prototype.do = async function() {
   try {
     var commandArr = [];
@@ -430,7 +401,7 @@ _Xdotoolify.prototype.do = async function() {
             }
           }
           if (op.until) {
-            let expires = Date.now() + 3000;
+            let expires = Date.now() + Xdotoolify.defaultCheckUntilTimeout;
             let mostRecent = null;
             while ((mostRecent = await run(true))[1] !== op.value) {
               if (Date.now() > expires) {
@@ -531,10 +502,6 @@ _Xdotoolify.prototype.do = async function() {
           commandArr.push(`type ${JSON.stringify(op.text)}`);
           await this._do(commandArr.join(' '));
           commandArr = [];
-        } else if (op.type === 'sleepUntil') {
-          await this._do(commandArr.join(' '));
-          commandArr = [];
-          await _sleepUntil(op.predicate, op.timeout);
         }
       } catch (e) {
         // HACK: because the operations are all chained up first, and then
@@ -574,6 +541,9 @@ _Xdotoolify.prototype._do = async function(command) {
 var Xdotoolify = function(page) {
   page.X = new _Xdotoolify(page);
 };
+
+Xdotoolify.defaultCheckUntilTimeout = 3000;
+
 Xdotoolify.setupWithPage = function(f) {
   f._xdotoolifyWithPage = true;
   return f;
