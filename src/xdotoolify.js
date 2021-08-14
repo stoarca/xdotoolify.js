@@ -394,7 +394,15 @@ _Xdotoolify.prototype.do = async function() {
                 if (ignoreCallbackError) {
                   return [ret, e];
                 } else {
-                  e.stack += '\nValue being checked: ' + JSON.stringify(ret);
+                  let retJSON;
+
+                  try {
+                    retJSON = JSON.stringify(ret)
+                  } catch (e) {
+                    retJSON = e;
+                  }
+
+                  e.stack += '\nValue being checked: ' + retJSON;
                   throw e;
                 }
               }
@@ -404,12 +412,20 @@ _Xdotoolify.prototype.do = async function() {
             let expires = Date.now() + Xdotoolify.defaultCheckUntilTimeout;
             let mostRecent = null;
             while ((mostRecent = await run(true))[1] !== op.value) {
+              let mostRecentJSON;
+
+              try {
+                mostRecentJSON = JSON.stringify(mostRecent[0])
+              } catch (e) {
+                mostRecentJSON = e;
+              }
+
               if (Date.now() > expires) {
                 throw new Error(
                   'Timeout exceeded waiting for ' + op.func.name +
                   ' called with ' + op.args.map(x => x.toString()).join(', ') +
                   ' to be ' + op.value + '.\n' +
-                  'Most recent value: ' + JSON.stringify(mostRecent[0]) + '\n' +
+                  'Most recent value: ' + mostRecentJSON + '\n' +
                   'Most recent check result: ' + mostRecent[1] + '\n'
                 );
               }
