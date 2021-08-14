@@ -54,6 +54,24 @@ describe('xdotoolify', function() {
     expect(stack).toContain(' [{"a":5},6]\n');
   }));
 
+  it('should be able to handle circular objects in check', syncify(async function() {
+    const circularObject = {};
+    circularObject.b = circularObject;
+
+    let stack = 'empty stack';
+    let badFunc = Xdotoolify.setupWithPage((page) => { return circularObject; });
+
+    try {
+      await page.X.check(badFunc, () => {
+        throw new Error('callback');
+      }).do();
+    } catch (e) {
+      stack = e.stack;
+    }
+
+    expect(stack).toContain('Value being checked: TypeError: Converting circular structure to JSON');
+  }));
+
   it('should print checkUntil values on bad check', syncify(async function() {
     let stack = 'nothing';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return [{a: 5}, 6]; });
@@ -127,5 +145,21 @@ describe('xdotoolify', function() {
     expect(stack).toContain('nothing');
 
     Xdotoolify.defaultCheckUntilTimeout = 3000;
+  }));
+
+  it('should be able to handle circular objects in checkUntil', syncify(async function() {
+    const circularObject = {};
+    circularObject.b = circularObject;
+
+    let errorMsg = 'Nothing thrown';
+    let badFunc = Xdotoolify.setupWithPage((page) => { return circularObject; });
+
+    try {
+      await page.X.checkUntil(badFunc, x => x, 10).do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toContain('Most recent value: TypeError: Converting circular structure to JSON');
   }));
 });
