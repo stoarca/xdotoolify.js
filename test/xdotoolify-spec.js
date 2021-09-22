@@ -162,4 +162,38 @@ describe('xdotoolify', function() {
 
     expect(errorMsg).toContain('Most recent value: TypeError: Converting circular structure to JSON');
   }));
+
+  it('should throw error when missing do() at the end of run command', syncify(async function() {
+    let errorMsg = 'Nothing thrown';
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
+    const withDo = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .checkUntil(goodFunc, x => x * 2, 10)
+          .do();
+    });
+    const withoutDo = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .checkUntil(goodFunc, x => x * 2, 10);
+    });
+
+    try {
+      await page.X
+          .run(withDo)
+          .checkUntil(goodFunc, x => x * 2, 10).do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    try {
+      await page.X
+          .run(withoutDo)
+          .checkUntil(goodFunc, x => x * 2, 10).do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+    
+    expect(errorMsg).toBe('You forgot to add ".do() "at the end of a subcommand.');
+  }));
 });

@@ -204,7 +204,7 @@ _Xdotoolify.prototype.sleep = function(ms) {
 };
 _Xdotoolify.prototype.run = function(f, ...rest) {
   this._addOperation({
-    type: 'runOrCheck',
+    type: 'run',
     func: f,
     args: rest,
   });
@@ -212,7 +212,7 @@ _Xdotoolify.prototype.run = function(f, ...rest) {
 };
 _Xdotoolify.prototype.check = function(f, ...rest) {
   this._addOperation({
-    type: 'runOrCheck',
+    type: 'check',
     func: f,
     args: rest.slice(0, rest.length - 1),
     callback: rest[rest.length - 1],
@@ -221,7 +221,7 @@ _Xdotoolify.prototype.check = function(f, ...rest) {
 };
 _Xdotoolify.prototype.checkUntil = function(f, ...rest) {
   this._addOperation({
-    type: 'runOrCheck',
+    type: 'check',
     func: f,
     args: rest.slice(0, rest.length - 2),
     callback: rest[rest.length - 2],
@@ -352,7 +352,7 @@ _Xdotoolify.prototype.do = async function() {
           await this._do(commandArr.join(' '));
           commandArr = [];
           await _sleep(op.ms);
-        } else if (op.type === 'runOrCheck') {
+        } else if (['run', 'check'].includes(op.type)) {
           await this._do(commandArr.join(' '));
           commandArr = [];
           if (op.func._xdotoolifyWithPage === undefined) {
@@ -431,8 +431,16 @@ _Xdotoolify.prototype.do = async function() {
               }
               await _sleep(100);
             }
+            if (op.type === 'run' && this.operations.length > 0) {
+              throw new Error('You forgot to add ".do() "' +
+                'at the end of a subcommand.')
+            }
           } else {
             await run(false);
+            if (op.type === 'run' && this.operations.length > 0) {
+              throw new Error('You forgot to add ".do() "' +
+                'at the end of a subcommand.')
+            }
           }
         } else if (op.type === 'mousemove') {
           await this._do(commandArr.join(' '));
