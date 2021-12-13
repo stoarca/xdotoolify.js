@@ -230,7 +230,24 @@ _Xdotoolify.prototype.checkUntil = function(f, ...rest) {
   });
   return this;
 };
-_Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep, timeout) {
+_Xdotoolify.prototype.checkNothing = function() {
+  let emptyFunc = Xdotoolify.setupWithPage((page) => { return true; });
+  return this.checkUntil(
+    emptyFunc,
+    x => x,
+    true
+  );
+};
+// internal versions of interaction functions do not
+// check for the presence of checkUntil after them
+// by default
+_Xdotoolify.prototype._mousemove = function(
+  selector,
+  relpos,
+  twoStep,
+  timeout,
+  checkAfter = false
+) {
   relpos = relpos || 'center';
   if (!RELATIVE_POSITION_MAPPING[relpos.toLowerCase()]) {
     throw new Error('Unknown relative position ' + relpos);
@@ -240,22 +257,46 @@ _Xdotoolify.prototype.mousemove = function(selector, relpos, twoStep, timeout) {
     selector: selector,
     relpos: relpos.toLowerCase(),
     twoStep: twoStep || false,
-    timeout: timeout || this.defaultTimeout
+    timeout: timeout || this.defaultTimeout,
+    checkAfter: checkAfter
   });
   return this;
 };
-_Xdotoolify.prototype.click = function(mouseButton) {
-  mouseButton = mouseButton || 'left';
+_Xdotoolify.prototype.mousemove = function(
+  selector,
+  relpos,
+  twoStep,
+  timeout
+) {
+  return this._mousemove(
+    selector,
+    relpos,
+    twoStep,
+    timeout,
+    true
+  )
+};
+_Xdotoolify.prototype._click = function(
+  mouseButton='left',
+  checkAfter = false
+) {
   if (!MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()]) {
     throw new Error('Unknown mouse button ' + mouseButton);
   }
   this._addOperation({
     type: 'click',
     mouseButton: MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()],
+    checkAfter: checkAfter
   });
   return this;
 };
-_Xdotoolify.prototype.mousedown = function(mouseButton) {
+_Xdotoolify.prototype.click = function(mouseButton='left') {
+  return this._click(
+    mouseButton,
+    true
+  );
+};
+_Xdotoolify.prototype._mousedown = function(mouseButton, checkAfter = false) {
   mouseButton = mouseButton || 'left';
   if (!MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()]) {
     throw new Error('Unknown mouse button ' + mouseButton);
@@ -263,10 +304,17 @@ _Xdotoolify.prototype.mousedown = function(mouseButton) {
   this._addOperation({
     type: 'mousedown',
     mouseButton: MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()],
+    checkAfter: checkAfter
   });
   return this;
 };
-_Xdotoolify.prototype.mouseup = function(mouseButton) {
+_Xdotoolify.prototype.mousedown = function(mouseButton) {
+  return this._mousedown(
+    mouseButton,
+    true
+  );
+};
+_Xdotoolify.prototype._mouseup = function(mouseButton, checkAfter = false) {
   mouseButton = mouseButton || 'left';
   if (!MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()]) {
     throw new Error('Unknown mouse button ' + mouseButton);
@@ -274,74 +322,199 @@ _Xdotoolify.prototype.mouseup = function(mouseButton) {
   this._addOperation({
     type: 'mouseup',
     mouseButton: MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()],
+    checkAfter: checkAfter
   });
   return this;
 };
+_Xdotoolify.prototype.mouseup = function(mouseButton) {
+  return this._mouseup(mouseButton, true);
+};
+_Xdotoolify.prototype._wheeldown = function(checkAfter = false) {
+  this._click('wheeldown', checkAfter);
+  return this;
+};
 _Xdotoolify.prototype.wheeldown = function() {
-  this.click('wheeldown');
+  return this._wheeldown(true);
+};
+_Xdotoolify.prototype._wheelup = function(checkAfter = false) {
+  this._click('wheelup', checkAfter);
   return this;
 };
 _Xdotoolify.prototype.wheelup = function() {
-  this.click('wheelup');
+  return this._wheelup(true);
+};
+_Xdotoolify.prototype._drag = function(
+  selector,
+  mouseButton,
+  timeout,
+  checkAfter = false
+) {
+  this._mousedown(mouseButton);
+  this._mousemove(selector, 'center', true, timeout || this.defaultTimeout);
+  this._mouseup(mouseButton, checkAfter);
   return this;
 };
-_Xdotoolify.prototype.drag = function(selector, mouseButton, timeout) {
-  this.mousedown(mouseButton);
-  this.mousemove(selector, 'center', true, timeout || this.defaultTimeout);
-  this.mouseup(mouseButton);
-  return this;
+_Xdotoolify.prototype.drag = function(
+  selector,
+  mouseButton,
+  timeout
+) {
+  return this._drag(
+    selector,
+    mouseButton,
+    timeout,
+    true
+  );
 };
-_Xdotoolify.prototype.key = function(key) {
+_Xdotoolify.prototype._key = function(key, checkAfter = false) {
   this._addOperation({
     type: 'key',
     key: key,
+    checkAfter: checkAfter
+  });
+  return this;
+};
+_Xdotoolify.prototype.key = function(key) {
+  return this._key(key, true);
+};
+_Xdotoolify.prototype._type = function(text, checkAfter = false) {
+  this._addOperation({
+    type: 'type',
+    text: text,
+    checkAfter: checkAfter
   });
   return this;
 };
 _Xdotoolify.prototype.type = function(text) {
-  this._addOperation({
-    type: 'type',
-    text: text,
-  });
+  return this._type(text, true);
+};
+_Xdotoolify.prototype._autoClick = function(
+  selector,
+  mouseButton,
+  timeout,
+  checkAfter = false
+) {
+  this._mousemove(selector, null, null, timeout || this.defaultTimeout);
+  this._click(mouseButton, checkAfter);
   return this;
 };
-_Xdotoolify.prototype.autoClick = function(selector, mouseButton, timeout) {
-  this.mousemove(selector, null, null, timeout || this.defaultTimeout);
-  this.click(mouseButton);
+_Xdotoolify.prototype.autoClick = function(
+  selector,
+  mouseButton,
+  timeout
+) {
+  return this._autoClick(
+    selector,
+    mouseButton,
+    timeout,
+    true
+  );
+};
+_Xdotoolify.prototype._autoDrag = function(
+  sel1,
+  sel2,
+  mouseButton,
+  timeout,
+  checkAfter = false
+) {
+  this._mousemove(sel1, null, null, timeout || this.defaultTimeout);
+  this._drag(sel2, mouseButton, checkAfter);
   return this;
 };
-_Xdotoolify.prototype.autoDrag = function(sel1, sel2, mouseButton, timeout) {
-  this.mousemove(sel1, null, null, timeout || this.defaultTimeout);
-  this.drag(sel2, mouseButton);
-  return this;
+_Xdotoolify.prototype.autoDrag = function(
+  sel1,
+  sel2,
+  mouseButton,
+  timeout
+) {
+  return this._autoDrag(
+    sel1,
+    sel2,
+    mouseButton,
+    timeout,
+    true
+  );
 };
-_Xdotoolify.prototype.autoKey = function(selector, key, relpos, timeout) {
+_Xdotoolify.prototype._autoKey = function(
+  selector,
+  key,
+  relpos,
+  timeout,
+  checkAfter = false
+) {
   if (!relpos) {
     relpos = 'bottomright';
   }
-  this.mousemove(selector, relpos, null, timeout || this.defaultTimeout);
-  this.click();
-  this.key(key);
+  this._mousemove(selector, relpos, null, timeout || this.defaultTimeout);
+  this._click('left');
+  this._key(key, checkAfter);
   return this;
 };
-_Xdotoolify.prototype.autoType = function(selector, text, relpos, timeout) {
+_Xdotoolify.prototype.autoKey = function(
+  selector,
+  key,
+  relpos,
+  timeout
+) {
+  return this._autoKey(
+    selector,
+    key,
+    relpos,
+    timeout,
+    true
+  );
+};
+_Xdotoolify.prototype._autoType = function(
+  selector,
+  text,
+  relpos,
+  timeout,
+  checkAfter = false
+) {
   if (!relpos) {
     relpos = 'bottomright'
   }
-  this.mousemove(selector, relpos, null, timeout || this.defaultTimeout);
-  this.click();
+  this._mousemove(selector, relpos, null, timeout || this.defaultTimeout);
+  this._click('left');
   var lines = text.toString().split('\n');
   for (var i = 0; i < lines.length; ++i) {
     if (i > 0) {
-      this.key('Return');
+      this._key('Return');
     }
-    this.type(lines[i]);
+    if (i === lines.length - 1) {
+      this._type(lines[i], checkAfter);
+    } else {
+      this._type(lines[i]);
+    }
   }
   return this;
 };
+_Xdotoolify.prototype.autoType = function(
+  selector,
+  text,
+  relpos,
+  timeout
+) {
+  return this._autoType(
+    selector,
+    text,
+    relpos,
+    timeout,
+    true
+  );
+};
 
-_Xdotoolify.prototype.do = async function() {
+_Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
   try {
+    if (this.unsafe === undefined) {
+      this.unsafe = options.unsafe
+    }
+    if (!this.unsafe && options.unsafe) {
+      throw new Error(
+        'Unsafe do() calls are not allowed within ' +
+        'safe ones.'
+      )
+    }
     var commandArr = [];
     let operations = this.operations;
     this.operations = [];
@@ -431,10 +604,6 @@ _Xdotoolify.prototype.do = async function() {
               }
               await _sleep(100);
             }
-            if (op.type === 'run' && this.operations.length > 0) {
-              throw new Error('You forgot to add ".do() "' +
-                'at the end of a subcommand.')
-            }
           } else {
             await run(false);
             if (op.type === 'run' && this.operations.length > 0) {
@@ -442,7 +611,17 @@ _Xdotoolify.prototype.do = async function() {
                 'at the end of a subcommand.')
             }
           }
-        } else if (op.type === 'mousemove') {
+        } else {
+          let nextOp = null;
+          if (i < operations.length - 1) {
+            nextOp = operations[i+1]
+          }
+          if (!options.unsafe && op.checkAfter && (!nextOp || !['check'].includes(nextOp.type))) {
+            throw new Error('Missing checkUntil after interaction.')
+          }
+        }
+        
+        if (op.type === 'mousemove') {
           await this._do(commandArr.join(' '));
           commandArr = [];
 

@@ -196,4 +196,74 @@ describe('xdotoolify', function() {
     
     expect(errorMsg).toBe('You forgot to add ".do() "at the end of a subcommand.');
   }));
+
+  it('should throw error when missing checkUntil after interaction', syncify(async function() {
+    let errorMsg = 'Nothing thrown';
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
+    let withCheck = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .checkUntil(goodFunc, x => x * 2, 10)
+          .do()
+    });
+
+    try {
+      await page.X
+          .run(withCheck)
+          .do()
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    withCheck = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .checkNothing()
+          .do()
+    });
+
+    try {
+      await page.X
+          .run(withCheck)
+          .do()
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    let withoutCheck = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .do({unsafe: true});
+    });
+
+    try {
+      await page.X
+          .run(withoutCheck)
+          .do()
+    } catch (e) {
+      errorMsg = e.message;
+    }
+    
+    expect(errorMsg).toBe('Unsafe do() calls are not allowed within safe ones.');
+
+    withoutCheck = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .do();
+    });
+
+    try {
+      await page.X
+          .run(withoutCheck)
+          .do()
+    } catch (e) {
+      errorMsg = e.message;
+    }
+    
+    expect(errorMsg).toBe('Missing checkUntil after interaction.');
+  }));
 });
