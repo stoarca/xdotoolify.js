@@ -507,11 +507,11 @@ _Xdotoolify.prototype.autoType = function(
 
 _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
   try {
-    const isSafe = this.unsafe.length > 0 ?
+    const isParentSafe = this.unsafe.length > 0 ?
       !this.unsafe[this.unsafe.length - 1] : false;
     this.unsafe.push(options.unsafe);
 
-    if (isSafe && options.unsafe) {
+    if (isParentSafe && options.unsafe) {
       throw new Error(
         'Unsafe do() calls are not allowed within ' +
         'safe ones.'
@@ -618,7 +618,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           if (i < operations.length - 1) {
             nextOp = operations[i+1]
           }
-          if (isSafe && op.checkAfter && (!nextOp || !['check'].includes(nextOp.type))) {
+          if (!options.unsafe && op.checkAfter && (!nextOp || !['check'].includes(nextOp.type))) {
             throw new Error('Missing checkUntil after interaction.')
           }
         }
