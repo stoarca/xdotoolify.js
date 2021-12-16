@@ -204,13 +204,13 @@ describe('xdotoolify', function() {
       return page.X
           .click()
           .checkUntil(goodFunc, x => x * 2, 10)
-          .do()
+          .do();
     });
 
     try {
       await page.X
           .run(withCheck)
-          .do()
+          .do();
     } catch (e) {
       errorMsg = e.message;
     }
@@ -221,13 +221,13 @@ describe('xdotoolify', function() {
       return page.X
           .click()
           .checkNothing()
-          .do()
+          .do();
     });
 
     try {
       await page.X
           .run(withCheck)
-          .do()
+          .do();
     } catch (e) {
       errorMsg = e.message;
     }
@@ -243,7 +243,7 @@ describe('xdotoolify', function() {
     try {
       await page.X
           .run(withoutCheck)
-          .do()
+          .do();
     } catch (e) {
       errorMsg = e.message;
     }
@@ -259,11 +259,98 @@ describe('xdotoolify', function() {
     try {
       await page.X
           .run(withoutCheck)
-          .do()
+          .do();
     } catch (e) {
       errorMsg = e.message;
     }
     
+    expect(errorMsg).toBe('Missing checkUntil after interaction.');
+  }));
+
+  it('should handle safe calls after unsafe ones and nested calls', syncify(async function() {
+    let errorMsg = 'Nothing thrown';
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
+
+    let withCheck = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .checkUntil(goodFunc, x => x * 2, 10)
+          .do();
+    });
+    let withoutCheckUnsafe = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .do({unsafe: true});
+    });
+    let withoutCheckSafe = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .do();
+    });
+
+    try {
+      await page.X
+          .run(withCheck)
+          .do();
+      await page.X
+          .run(withoutCheckUnsafe)
+          .do({unsafe: true});
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+  
+    let safelyWrappedWithoutCheckUnsafe = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .run(withoutCheckUnsafe)
+          .do();
+    });
+    let safelyWrappedWithoutCheckSafe = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .run(withoutCheckSafe)
+          .do();
+    });
+    let safelyWrappedWithCheckSafe = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .run(withCheck)
+          .checkUntil(goodFunc, x => x * 2, 10)
+          .do();
+    });
+
+    // unsafe > safe > unsafe
+    try {
+      await page.X
+          .run(safelyWrappedWithoutCheckUnsafe)
+          .do({unsafe: true});
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Unsafe do() calls are not allowed within safe ones.');
+
+    errorMsg = 'Nothing thrown';
+
+    // unsafe > safe > safe
+    try {
+      await page.X
+          .run(safelyWrappedWithCheckSafe)
+          .do({unsafe: true});
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    // unsafe > safe > safe (with missing checkUntil)
+    try {
+      await page.X
+          .run(safelyWrappedWithoutCheckSafe)
+          .do({unsafe: true});
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
     expect(errorMsg).toBe('Missing checkUntil after interaction.');
   }));
 });

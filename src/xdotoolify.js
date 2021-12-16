@@ -176,6 +176,7 @@ var MOUSE_BUTTON_MAPPING = {
 
 var _Xdotoolify = function(page) {
   this.page = page;
+  this.unsafe = [];
   this.xWindowId = childProcess.execSync(
     'xdotool getactivewindow'
   ).toString('utf8').trim();
@@ -506,10 +507,11 @@ _Xdotoolify.prototype.autoType = function(
 
 _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
   try {
-    if (this.unsafe === undefined) {
-      this.unsafe = options.unsafe
-    }
-    if (!this.unsafe && options.unsafe) {
+    const isSafe = this.unsafe.length > 0 ?
+      !this.unsafe[this.unsafe.length - 1] : false;
+    this.unsafe.push(options.unsafe);
+
+    if (isSafe && options.unsafe) {
       throw new Error(
         'Unsafe do() calls are not allowed within ' +
         'safe ones.'
@@ -616,7 +618,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           if (i < operations.length - 1) {
             nextOp = operations[i+1]
           }
-          if (!options.unsafe && op.checkAfter && (!nextOp || !['check'].includes(nextOp.type))) {
+          if (isSafe && op.checkAfter && (!nextOp || !['check'].includes(nextOp.type))) {
             throw new Error('Missing checkUntil after interaction.')
           }
         }
@@ -719,6 +721,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
       await this._do(commandArr.join(' '));
     }
   } finally {
+    this.unsafe.pop();
     await _sleep(50);
   }
 };
