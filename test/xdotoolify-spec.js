@@ -17,7 +17,7 @@ describe('xdotoolify', function() {
     let badFunc = () => {};
 
     try {
-      await page.X.check(badFunc, noop).do();
+      await page.X.check(badFunc, noop).do({unsafe: true});
     } catch (e) {
       errorMsg = e.message;
     }
@@ -30,7 +30,9 @@ describe('xdotoolify', function() {
     let goodFunc = Xdotoolify.setupWithPage((page) => {});
 
     try {
-      await page.X.check(goodFunc, () => { throw new Error('inside'); }).do();
+      await page.X.check(goodFunc, () => { throw new Error('inside'); }).do({
+        unsafe: true
+      });
     } catch (e) {
       errorMsg = e.message;
     }
@@ -44,7 +46,9 @@ describe('xdotoolify', function() {
     let goodFunc = Xdotoolify.setupWithPage((page) => { return [{a: 5}, 6]; });
 
     try {
-      await page.X.check(goodFunc, () => { throw new Error('inside'); }).do();
+      await page.X.check(goodFunc, () => { throw new Error('inside'); }).do({
+        unsafe: true
+      });
     } catch (e) {
       errorMsg = e.message;
       stack = e.stack;
@@ -64,7 +68,7 @@ describe('xdotoolify', function() {
     try {
       await page.X.check(badFunc, () => {
         throw new Error('callback');
-      }).do();
+      }).do({unsafe: true});
     } catch (e) {
       stack = e.stack;
     }
@@ -352,5 +356,34 @@ describe('xdotoolify', function() {
     }
 
     expect(errorMsg).toBe('Missing checkUntil after interaction.');
+  }));
+
+  it('should not allow check statements in safe do call', syncify(async function() {
+    let errorMsg = 'Nothing thrown';
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
+    const noop = () => {};
+
+    try {
+      await page.X
+          .check(goodFunc, noop)
+          .do({unsafe: true});
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    try {
+      await page.X
+          .check(goodFunc, noop)
+          .do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe(
+      '\'check\' actions are now deprecated. Please rewrite' +
+      ' as \'checkUntil\'.'
+    );
   }));
 });

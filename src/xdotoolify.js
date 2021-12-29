@@ -213,7 +213,7 @@ _Xdotoolify.prototype.run = function(f, ...rest) {
 };
 _Xdotoolify.prototype.check = function(f, ...rest) {
   this._addOperation({
-    type: 'check',
+    type: 'deprecatedCheck',
     func: f,
     args: rest.slice(0, rest.length - 1),
     callback: rest[rest.length - 1],
@@ -522,12 +522,20 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
     this.operations = [];
     for (var i = 0; i < operations.length; ++i) {
       var op = operations[i];
+
+      if (!options.unsafe && op.type === 'deprecatedCheck') {
+        throw new Error(
+          '\'check\' actions are now deprecated. Please rewrite' +
+          ' as \'checkUntil\'.'
+        )
+      }
+
       try {
         if (op.type === 'sleep') {
           await this._do(commandArr.join(' '));
           commandArr = [];
           await _sleep(op.ms);
-        } else if (['run', 'check'].includes(op.type)) {
+        } else if (['run', 'check', 'deprecatedCheck'].includes(op.type)) {
           await this._do(commandArr.join(' '));
           commandArr = [];
           if (op.func._xdotoolifyWithPage === undefined) {
