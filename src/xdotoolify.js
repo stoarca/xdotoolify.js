@@ -330,12 +330,44 @@ _Xdotoolify.prototype._mouseup = function(mouseButton, checkAfter = false) {
 _Xdotoolify.prototype.mouseup = function(mouseButton) {
   return this._mouseup(mouseButton, true);
 };
-_Xdotoolify.prototype._wheeldown = function(checkAfter = false) {
+_Xdotoolify.prototype._jitter = function() {
+  this._addOperation({
+    type: 'jitter'
+  });
+  return this;
+}
+_Xdotoolify.prototype.jitter = function() {
+  return this._jitter;
+}
+_Xdotoolify.prototype._wheeldownWithJitter = function(checkAfter = false) {
+  // In Firefox, if a scroll is done on one element, and then the mouse
+  // hovers on another element while still scrolling, there is a short
+  // period of time where continued scrolls will apply to the initially
+  // scrolled element rather than the new one. This can sometimes affect
+  // tests that do scrolls too quickly on multiple different elements. A
+  // jitter of the mouse forces Firefox to apply the next scroll to the
+  // newly hovered element immediately, and since this is almost always
+  // the expected behavior in tests, you should usually use `scrollWithJitter`.
+  // If there is a case where you need exactly control over the events sent,
+  // use `wheeldownWithoutJitterUnsafe`, but be aware of the above.
+
+  this._jitter();
   this._click('wheeldown', checkAfter);
   return this;
 };
-_Xdotoolify.prototype.wheeldown = function() {
-  return this._wheeldown(true);
+_Xdotoolify.prototype.wheeldownWithJitter = function() {
+  return this._wheeldownWithJitter(true);
+};
+_Xdotoolify.prototype._wheeldownWithoutJitterUnsafe = function(checkAfter = false) {
+  // Scroll without jittering beforehand. See _wheeldownWithJitter for an explanation
+  // of why a jitter is normally required.
+  // If it is needed for a scroll element to produce a deterministic number of
+  // events, this function should be called.
+  this._click('wheeldown', checkAfter);
+  return this;
+};
+_Xdotoolify.prototype.wheeldownWithoutJitterUnsafe = function() {
+  return this._wheeldownWithoutJitterUnsafe(true);
 };
 _Xdotoolify.prototype._wheelup = function(checkAfter = false) {
   this._click('wheelup', checkAfter);
@@ -606,7 +638,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
               if (Date.now() > expires) {
                 throw new Error(
                   'Timeout exceeded waiting for ' + op.func.name +
-                  ' called with ' + op.args.map(x => x.toString()).join(', ') +
+                  ' called with ' + op.args.map(x => String(x)).join(', ') +
                   ' to be ' + op.value + '.\n' +
                   'Most recent value: ' + mostRecentJSON + '\n' +
                   'Most recent check result: ' + mostRecent[1] + '\n'
@@ -630,7 +662,19 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
             throw new Error('Missing checkUntil after interaction.')
           }
         }
-        
+        if (op.type === 'jitter') {
+          const pos = {
+            x: this.page.xjsLastPos.x,
+            y: this.page.xjsLastPos.y,
+          };
+          commandArr.push(`mousemove --sync ${
+            pos.x > 0 ?  pos.x - 1 : pos.x + 1
+          } ${pos.y}`);
+          commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
+          await this._do(commandArr.join(' '));
+          await _sleep(50);
+          commandArr = [];
+        }
         if (op.type === 'mousemove') {
           await this._do(commandArr.join(' '));
           commandArr = [];
@@ -663,7 +707,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
               x: op.selector.screenx,
               y: op.selector.screeny,
             };
-          } else if (op.selector.relx || op.selector.rely) {
+          } else if (op.selector.relx !== undefined || op.selector.rely !== undefined) {
             pos = {
               x: this.page.xjsLastPos.x + (pos.relx || 0),
               y: this.page.xjsLastPos.y + (pos.rely || 0),
@@ -676,14 +720,13 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
               };
             }, pos);
           }
-          // jitter when moving a mouse to the same location or it won't trigger
+          // warn when moving a mouse to the same location 
           if (!this.page.xjsLastPos ||
               this.page.xjsLastPos.x === pos.x &&
                   this.page.xjsLastPos.y === pos.y) {
-            commandArr.push(`mousemove --sync ${pos.x - 1} ${pos.y}`);
-            await this._do(commandArr.join(' '));
-            await _sleep(50);
-            commandArr = [];
+            throw new Error('The mouse is being moved to the same location twice. ' +
+              'If your intention was to trigger a jitter, please use the "jitter" ' +
+              'command.')
           }
           if (op.twoStep) {
             // we issue two mousemove commands because firefox won't start a drag
