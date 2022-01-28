@@ -247,7 +247,8 @@ _Xdotoolify.prototype._mousemove = function(
   relpos,
   twoStep,
   timeout,
-  checkAfter = false
+  checkAfter = false,
+  skipSamePos = false
 ) {
   relpos = relpos || 'center';
   if (!RELATIVE_POSITION_MAPPING[relpos.toLowerCase()]) {
@@ -259,7 +260,8 @@ _Xdotoolify.prototype._mousemove = function(
     relpos: relpos.toLowerCase(),
     twoStep: twoStep || false,
     timeout: timeout || this.defaultTimeout,
-    checkAfter: checkAfter
+    checkAfter: checkAfter,
+    skipSamePos: skipSamePos
   });
   return this;
 };
@@ -267,14 +269,16 @@ _Xdotoolify.prototype.mousemove = function(
   selector,
   relpos,
   twoStep,
-  timeout
+  timeout,
+  skipSamePos = false
 ) {
   return this._mousemove(
     selector,
     relpos,
     twoStep,
     timeout,
-    true
+    true,
+    skipSamePos
   )
 };
 _Xdotoolify.prototype._click = function(
@@ -337,7 +341,7 @@ _Xdotoolify.prototype._jitter = function() {
   return this;
 }
 _Xdotoolify.prototype.jitter = function() {
-  return this._jitter;
+  return this._jitter();
 }
 _Xdotoolify.prototype._wheeldownWithJitter = function(checkAfter = false) {
   // In Firefox, if a scroll is done on one element, and then the mouse
@@ -369,12 +373,20 @@ _Xdotoolify.prototype._wheeldownWithoutJitterUnsafe = function(checkAfter = fals
 _Xdotoolify.prototype.wheeldownWithoutJitterUnsafe = function() {
   return this._wheeldownWithoutJitterUnsafe(true);
 };
-_Xdotoolify.prototype._wheelup = function(checkAfter = false) {
+_Xdotoolify.prototype._wheelupWithJitter = function(checkAfter = false) {
+  this._jitter();
   this._click('wheelup', checkAfter);
   return this;
 };
-_Xdotoolify.prototype.wheelup = function() {
-  return this._wheelup(true);
+_Xdotoolify.prototype.wheelupWithJitter = function() {
+  return this._wheelupWithJitter(true);
+};
+_Xdotoolify.prototype._wheelupWithoutJitterUnsafe = function(checkAfter = false) {
+  this._click('wheelup', checkAfter);
+  return this;
+};
+_Xdotoolify.prototype._wheelupWithoutJitterUnsafe = function() {
+  return this._wheelupWithoutJitterUnsafe(true);
 };
 _Xdotoolify.prototype._drag = function(
   selector,
@@ -427,7 +439,14 @@ _Xdotoolify.prototype._autoClick = function(
   timeout,
   checkAfter = false
 ) {
-  this._mousemove(selector, null, null, timeout || this.defaultTimeout);
+  this._mousemove(
+    selector,
+    null,
+    null,
+    timeout || this.defaultTimeout,
+    null,
+    true
+    );
   this._click(mouseButton, checkAfter);
   return this;
 };
@@ -450,7 +469,14 @@ _Xdotoolify.prototype._autoDrag = function(
   timeout,
   checkAfter = false
 ) {
-  this._mousemove(sel1, null, null, timeout || this.defaultTimeout);
+  this._mousemove(
+    sel1,
+    null,
+    null,
+    timeout || this.defaultTimeout,
+    null,
+    true
+  );
   this._drag(sel2, mouseButton, checkAfter);
   return this;
 };
@@ -478,7 +504,14 @@ _Xdotoolify.prototype._autoKey = function(
   if (!relpos) {
     relpos = 'bottomright';
   }
-  this._mousemove(selector, relpos, null, timeout || this.defaultTimeout);
+  this._mousemove(
+    selector,
+    relpos,
+    null,
+    timeout || this.defaultTimeout,
+    null,
+    true
+    );
   this._click('left');
   this._key(key, checkAfter);
   return this;
@@ -507,7 +540,14 @@ _Xdotoolify.prototype._autoType = function(
   if (!relpos) {
     relpos = 'bottomright'
   }
-  this._mousemove(selector, relpos, null, timeout || this.defaultTimeout);
+  this._mousemove(
+    selector,
+    relpos,
+    null,
+    timeout || this.defaultTimeout,
+    null,
+    true
+  );
   this._click('left');
   var lines = text.toString().split('\n');
   for (var i = 0; i < lines.length; ++i) {
@@ -721,12 +761,17 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
             }, pos);
           }
           // warn when moving a mouse to the same location 
-          if (!this.page.xjsLastPos ||
+          if (
+            !this.page.xjsLastPos ||
               this.page.xjsLastPos.x === pos.x &&
-                  this.page.xjsLastPos.y === pos.y) {
+              this.page.xjsLastPos.y === pos.y
+          ) {
+            if (op.skipSamePos) {
+              continue
+            }
             throw new Error('The mouse is being moved to the same location twice. ' +
               'If your intention was to trigger a jitter, please use the "jitter" ' +
-              'command.')
+              'command. You may also run mousemove with skipSamePos = true.')
           }
           if (op.twoStep) {
             // we issue two mousemove commands because firefox won't start a drag
