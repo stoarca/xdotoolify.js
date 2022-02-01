@@ -174,7 +174,7 @@ var MOUSE_BUTTON_MAPPING = {
   wheeldown: 5,
 };
 
-var _Xdotoolify = function(page) {
+var _Xdotoolify = function(page, xjsLastPos) {
   this.page = page;
   this.unsafe = [];
   this.xWindowId = childProcess.execSync(
@@ -182,11 +182,13 @@ var _Xdotoolify = function(page) {
   ).toString('utf8').trim();
   childProcess.execSync('xdotool windowmove ' + this.xWindowId + ' 0 0');
   this.operations = [];
-  if (!page.xjsLastPos) {
+  if (!xjsLastPos) {
     page.xjsLastPos = {
       x: 0,
       y: 0,
     };
+  } else {
+    page.xjsLastPos = xjsLastPos;
   }
   this.defaultTimeout = 1000;
 };
@@ -790,7 +792,8 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           await this._do(commandArr.join(' '));
           await _sleep(50);
           commandArr = [];
-          this.page.xjsLastPos = pos;
+          this.page.xjsLastPos.x = pos.x;
+          this.page.xjsLastPos.y = pos.y;
         } else if (op.type === 'click') {
           commandArr.push(`click ${op.mouseButton}`);
         } else if (op.type === 'mousedown') {
@@ -840,8 +843,8 @@ _Xdotoolify.prototype._do = async function(command) {
   }
 };
 
-var Xdotoolify = function(page) {
-  page.X = new _Xdotoolify(page);
+var Xdotoolify = function(page, xjsLastPos) {
+  page.X = new _Xdotoolify(page, xjsLastPos);
 };
 
 Xdotoolify.defaultCheckUntilTimeout = 3000;
