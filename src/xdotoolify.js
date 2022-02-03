@@ -1,5 +1,125 @@
 import childProcess from 'child_process';
 
+var _sleep = function(time) {
+  return new Promise(function(resolve) {
+    setTimeout(resolve, time);
+  });
+};
+
+const _waitForClickAction = async function(page, timeout) {
+  let expires = Date.now() + timeout;
+
+  return new Promise(async (resolve) => {
+    let clickRegistered;
+    let errorMsg;
+    while (Date.now() < expires) {
+      [clickRegistered, errorMsg] = await page.executeScript(function() {
+        return [window.clickRegistered, window.clickError];
+      });
+      if (clickRegistered || clickRegistered === null) { break; }
+      await _sleep(50);
+    }
+    if (errorMsg) {
+      resolve(errorMsg);
+    }
+    if (clickRegistered === true || clickRegistered === null) {
+      resolve(null);
+    }
+    resolve('Timed out while waiting for click to be registered');
+  })
+};
+
+var _addClickHandler = async function(page, selector, eventType) {
+  await page.executeScript(function(_selector, _eventType) {
+    window.selectedEl = Array.isArray(_selector) ? (
+      document.querySelectorAll(_selector[0])[_selector[1]]
+    ) : document.querySelector(_selector);
+    window.clickRegistered = false;
+    document.addEventListener(_eventType, (event) => {
+      window.handlerActive = false;
+      window.clickError = null;
+
+      if (!(event.button in [0, 1, 2])) { return; }
+
+      window.clickRegistered = true;
+      const {target} = event;
+
+      const _isDescendant = function (parent, child) {
+        let node = child.parentNode;
+        while (node) {
+          if (node === parent) {
+              return true;
+          }
+          node = node.parentNode;
+        }
+        return false;
+      };
+
+      const _getAncestry = function (el) {
+        let ancestry = [{
+          classes: el.classList,
+          tagName: el.tagName,
+          id: el.id,
+          dataTest: el.getAttribute('data-test')
+        }];
+        let currentEl = el.parentNode;
+        while (currentEl && currentEl.parentNode) {
+          ancestry.push({
+            classes: currentEl.classList,
+            tagName: currentEl.tagName,
+            id: currentEl.id,
+            dataTest: currentEl.getAttribute('data-test')
+          });
+          currentEl = currentEl.parentNode;
+        }
+        return ancestry.reverse();
+      };
+
+      if (target !== window.selectedEl && !_isDescendant(window.selectedEl, target)) {
+        const elementInDom = document.body.contains(window.selectedEl);
+        let errorMsg;
+        let ancestry;
+        try {
+          ancestry = _getAncestry(target);
+        } catch (e) {
+          console.error(e);
+        }
+
+        let genericMessage = (
+            'The clicked element has the following ancestor tree: \n'
+        );
+        ancestry.forEach(el => {
+          genericMessage += (
+            'tagName: "' + el.tagName + '" ' +
+            'id: "' + el.id + '" ' +
+            'data-test: "' + el.dataTest + '" ' +
+            'classes: "' + el.classes + '" >\n'
+          );
+        })
+        if (!elementInDom) {
+          errorMsg = (
+            'Selector ' + _selector + ' was not present in the document ' +
+              'at the moment of clicking. This could be caused by (1) the element ' +
+              'being removed from the DOM or (2) a change in the element\'s selector. ' +
+              'Please check and ensure the element is present and the selector used ' +
+              'leads to it at the moment of clicking. '
+          );
+        } else {
+          errorMsg = (
+            'Selector ' + _selector + ' does not match the clicked element. ' +
+              'This may be caused by (1) the element changing position (e.g ' +
+              'due to an animation) or (2) another element covering up the target ' +
+              'element. Please review screenshots and ensure that the cursor is at the ' +
+              'correct position. '
+          );
+        }
+        window.clickError = (errorMsg + genericMessage);
+      }
+    }, {once: true, capture: true});
+    window.handlerActive = true;
+  }, selector, eventType);
+};
+
 var _getElementAndBrowserRect = async function(page, selector) {
   return await page.executeScript(function(_selector) {
     var intersectRects = function(a, b) {
@@ -38,6 +158,23 @@ var _getElementAndBrowserRect = async function(page, selector) {
       }
       return rect;
     };
+
+    const checkIfInFrame = function(element) {
+      if (element.ownerDocument !== document) {
+        throw new Error(
+          'Frame elements not allowed within autoclick/mousemove ' +
+          'without switching to frame.'
+        )
+      }
+      if (element.tagName === 'IFRAME') {
+        throw new Error(
+          'It is prohibited to click iFrames directly. Please, ' +
+            'switch into the iFrame and click the desired element ' +
+            'from within it.'
+        )
+      }
+    };
+
     if (Array.isArray(_selector)) {
       var element = document.querySelectorAll(_selector[0]);
       if (!element) {
@@ -47,6 +184,7 @@ var _getElementAndBrowserRect = async function(page, selector) {
       for (var i = 1; i < _selector.length; ++i) {
         if (Number.isInteger(_selector[i])) {
           element = element[_selector[i]];
+          checkIfInFrame(element);
           result = getElementVisibleBoundingRect(element);
         } else {
           var subDoc =
@@ -55,6 +193,7 @@ var _getElementAndBrowserRect = async function(page, selector) {
           if (!element) {
             throw new Error(`Element selector "${_selector[i]}" not found`);
           }
+          checkIfInFrame(element[0]);
           var subResult = getElementVisibleBoundingRect(element[0]);
           result = {
             x: result.left + subResult.left,
@@ -66,6 +205,7 @@ var _getElementAndBrowserRect = async function(page, selector) {
       }
     } else {
       var element = document.querySelector(_selector);
+      checkIfInFrame(element);
       if (!element) {
         throw new Error(`Element selector "${_selector}" not found`);
       }
@@ -117,13 +257,10 @@ var waitUntilElementIsAvailable = async function(page, selector, timeout) {
   if (element) {
     return true;
   }
-  return false;
-};
-
-var _sleep = function(time) {
-  return new Promise(function(resolve) {
-    setTimeout(resolve, time);
-  });
+  throw new Error(
+    'Timed out while waiting for element ' +
+    'to become available.'
+  );
 };
 
 var centerize = function(rect) {
@@ -285,7 +422,8 @@ _Xdotoolify.prototype.mousemove = function(
 };
 _Xdotoolify.prototype._click = function(
   mouseButton='left',
-  checkAfter = false
+  checkAfter = false,
+  selector = null
 ) {
   if (!MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()]) {
     throw new Error('Unknown mouse button ' + mouseButton);
@@ -293,7 +431,8 @@ _Xdotoolify.prototype._click = function(
   this._addOperation({
     type: 'click',
     mouseButton: MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()],
-    checkAfter: checkAfter
+    checkAfter: checkAfter,
+    selector: selector
   });
   return this;
 };
@@ -449,7 +588,7 @@ _Xdotoolify.prototype._autoClick = function(
     null,
     true
     );
-  this._click(mouseButton, checkAfter);
+  this._click(mouseButton, checkAfter, selector);
   return this;
 };
 _Xdotoolify.prototype.autoClick = function(
@@ -550,7 +689,7 @@ _Xdotoolify.prototype._autoType = function(
     null,
     true
   );
-  this._click('left');
+  this._click('left', null, selector);
   var lines = text.toString().split('\n');
   for (var i = 0; i < lines.length; ++i) {
     if (i > 0) {
@@ -795,9 +934,33 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           this.page.xjsLastPos.x = pos.x;
           this.page.xjsLastPos.y = pos.y;
         } else if (op.type === 'click') {
-          commandArr.push(`click ${op.mouseButton}`);
+          if(op.mouseButton in [1, 2, 3] && op.selector) {
+            await _addClickHandler(this.page, op.selector, 'click');
+            commandArr.push(`click ${op.mouseButton}`);
+            await this._do(commandArr.join(' '));
+            const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+            if (clickError) {
+              throw new Error(clickError);
+            }
+            await _sleep(50);
+            commandArr = [];
+          } else {
+            commandArr.push(`click ${op.mouseButton}`);
+          }
         } else if (op.type === 'mousedown') {
-          commandArr.push(`mousedown ${op.mouseButton}`);
+          if(op.mouseButton in [1, 2, 3] && op.selector) {
+            await _addClickHandler(this.page, op.selector, 'mousedown');
+            commandArr.push(`mousedown ${op.mouseButton}`);
+            await this._do(commandArr.join(' '));
+            const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+            if (clickError) {
+              throw new Error(clickError);
+            }
+            await _sleep(50);
+            commandArr = [];
+          } else {
+            commandArr.push(`mousedown ${op.mouseButton}`);
+          }
         } else if (op.type === 'mouseup') {
           commandArr.push(`mouseup ${op.mouseButton}`);
         } else if (op.type === 'key') {
