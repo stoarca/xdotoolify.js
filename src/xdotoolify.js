@@ -18,11 +18,10 @@ const _waitForClickAction = async function(page, timeout) {
       if (!clickInfo || clickInfo.registered) { break; }
       await _sleep(50);
     }
-    if (!clickInfo || clickInfo.registered) {
+    if (!clickInfo || (clickInfo.registered && !clickInfo.error)) {
       resolve(null);
       return;
-    }
-    if (clickInfo.error) {
+    } else {
       resolve(clickInfo.error);
       return;
     }
