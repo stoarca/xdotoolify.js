@@ -10,22 +10,21 @@ const _waitForClickAction = async function(page, timeout) {
   let expires = Date.now() + timeout;
 
   return new Promise(async (resolve) => {
-    let clickRegistered;
-    let errorMsg;
+    let clickInfo;
     while (Date.now() < expires) {
-      [clickRegistered, errorMsg] = await page.executeScript(function() {
-        return [window.clickRegistered, window.clickError];
+      clickInfo = await page.executeScript(function() {
+        return window.clickInfo;
       });
-      if (clickRegistered || clickRegistered === null) { break; }
+      if (!clickInfo || clickInfo.registered) { break; }
       await _sleep(50);
     }
-    if (errorMsg) {
-      resolve(errorMsg);
-    }
-    if (clickRegistered === true || clickRegistered === null) {
+    if (!clickInfo || clickInfo.registered) {
       resolve(null);
     }
-    resolve('Timed out while waiting for click to be registered');
+    if (clickInfo.error) {
+      resolve(clickInfo.error);
+    }
+    resolve('Timed out while waiting for click to be registered.');
   })
 };
 
@@ -34,14 +33,19 @@ var _addClickHandler = async function(page, selector, eventType) {
     window.selectedEl = Array.isArray(_selector) ? (
       document.querySelectorAll(_selector[0])[_selector[1]]
     ) : document.querySelector(_selector);
-    window.clickRegistered = false;
+
+    window.clickInfo = {
+      registered: false,
+      error: null
+    };
+
     document.addEventListener(_eventType, (event) => {
       window.handlerActive = false;
-      window.clickError = null;
+      window.clickInfo.error = null;
 
       if (!(event.button in [0, 1, 2])) { return; }
 
-      window.clickRegistered = true;
+      window.clickInfo.registered = true;
       const {target} = event;
 
       const _isDescendant = function (parent, child) {
@@ -113,7 +117,7 @@ var _addClickHandler = async function(page, selector, eventType) {
               'correct position. '
           );
         }
-        window.clickError = (errorMsg + genericMessage);
+        window.clickInfo.error = (errorMsg + genericMessage);
       }
     }, {once: true, capture: true});
     window.handlerActive = true;
@@ -938,13 +942,21 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
             op.mouseButton in [1, 2, 3] &&
             op.selector && 
             (Array.isArray(op.selector) || typeof op.selector === 'string')
-            ) {
-            await _addClickHandler(this.page, op.selector, 'click');
+          ) {
+            try {
+              await _addClickHandler(this.page, op.selector, 'click');
+            } catch (e) {
+              throw new Error(e);
+            }
             commandArr.push(`click ${op.mouseButton}`);
             await this._do(commandArr.join(' '));
-            const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
-            if (clickError) {
-              throw new Error(clickError);
+            try {
+              const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+              if (clickError) {
+                throw new Error(clickError);
+              }
+            } catch (e) {
+              throw new Error(e);
             }
             await _sleep(50);
             commandArr = [];
@@ -952,13 +964,25 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
             commandArr.push(`click ${op.mouseButton}`);
           }
         } else if (op.type === 'mousedown') {
-          if(op.mouseButton in [1, 2, 3] && op.selector) {
-            await _addClickHandler(this.page, op.selector, 'mousedown');
+          if (
+            op.mouseButton in [1, 2, 3] &&
+            op.selector &&
+            (Array.isArray(op.selector) || typeof op.selector === 'string')
+          ) {
+            try {
+              await _addClickHandler(this.page, op.selector, 'mousedown');
+            } catch (e) {
+              throw new Error(e);
+            }
             commandArr.push(`mousedown ${op.mouseButton}`);
             await this._do(commandArr.join(' '));
-            const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
-            if (clickError) {
-              throw new Error(clickError);
+            try {
+              const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+              if (clickError) {
+                throw new Error(clickError);
+              }
+            } catch (e) {
+              throw new Error(e);
             }
             await _sleep(50);
             commandArr = [];
