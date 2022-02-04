@@ -934,7 +934,11 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           this.page.xjsLastPos.x = pos.x;
           this.page.xjsLastPos.y = pos.y;
         } else if (op.type === 'click') {
-          if(op.mouseButton in [1, 2, 3] && op.selector) {
+          if (
+            op.mouseButton in [1, 2, 3] &&
+            op.selector && 
+            (Array.isArray(op.selector) || typeof op.selector === 'string')
+            ) {
             await _addClickHandler(this.page, op.selector, 'click');
             commandArr.push(`click ${op.mouseButton}`);
             await this._do(commandArr.join(' '));
