@@ -944,6 +944,11 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
             op.selector && 
             (Array.isArray(op.selector) || typeof op.selector === 'string')
           ) {
+            // clean up previous commands
+            await this._do(commandArr.join(' '));
+            await _sleep(50);
+            commandArr = [];
+
             try {
               await _addClickHandler(this.page, op.selector, 'click');
             } catch (e) {
@@ -970,6 +975,11 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
             op.selector &&
             (Array.isArray(op.selector) || typeof op.selector === 'string')
           ) {
+            // clean up previous commands
+            await this._do(commandArr.join(' '));
+            await _sleep(50);
+            commandArr = [];
+
             try {
               await _addClickHandler(this.page, op.selector, 'mousedown');
             } catch (e) {
