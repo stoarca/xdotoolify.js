@@ -20,9 +20,11 @@ const _waitForClickAction = async function(page, timeout) {
     }
     if (!clickInfo || clickInfo.registered) {
       resolve(null);
+      return;
     }
     if (clickInfo.error) {
       resolve(clickInfo.error);
+      return;
     }
     resolve('Timed out while waiting for click to be registered.');
   })
