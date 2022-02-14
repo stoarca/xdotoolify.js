@@ -44,7 +44,7 @@ var _addClickHandler = async function(page, selector, eventType) {
       window.handlerActive = false;
       window.clickInfo.error = null;
 
-      if (!(event.button in [0, 1, 2])) { return; }
+      if (![0, 1, 2].includes(event.button)) { return; }
 
       window.clickInfo.registered = true;
       const {target} = event;
@@ -210,10 +210,10 @@ var _getElementAndBrowserRect = async function(page, selector) {
       }
     } else {
       var element = document.querySelector(_selector);
-      checkIfInFrame(element);
       if (!element) {
         throw new Error(`Element selector "${_selector}" not found`);
       }
+      checkIfInFrame(element);
       var result = getElementVisibleBoundingRect(element);
     }
 
@@ -319,6 +319,8 @@ var MOUSE_BUTTON_MAPPING = {
 var _Xdotoolify = function(page, xjsLastPos) {
   this.page = page;
   this.unsafe = [];
+  this.requireCheckImmediatelyAfter = false;
+  this.level = 0;
   this.xWindowId = childProcess.execSync(
     'xdotool getactivewindow'
   ).toString('utf8').trim();
@@ -372,6 +374,12 @@ _Xdotoolify.prototype.checkUntil = function(f, ...rest) {
     callback: rest[rest.length - 2],
     until: true,
     value: rest[rest.length - 1],
+  });
+  return this;
+};
+_Xdotoolify.prototype.addRequireCheckImmediatelyAfter = function() {
+  this._addOperation({
+    type: 'addCheckRequirement'
   });
   return this;
 };
@@ -724,6 +732,7 @@ _Xdotoolify.prototype.autoType = function(
 };
 
 _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
+  this.level += 1;
   try {
     const isParentSafe = this.unsafe.length > 0 ?
       !this.unsafe[this.unsafe.length - 1] : false;
@@ -741,18 +750,32 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
     for (var i = 0; i < operations.length; ++i) {
       var op = operations[i];
 
-      if (!options.unsafe && op.type === 'deprecatedCheck') {
-        throw new Error(
-          '\'check\' actions are now deprecated. Please rewrite' +
-          ' as \'checkUntil\'.'
-        )
-      }
-
       try {
+        if (!options.unsafe && op.type === 'deprecatedCheck') {
+          throw new Error(
+            '\'check\' actions are now deprecated. Please rewrite' +
+            ' as \'checkUntil\'.'
+          )
+        }
+  
+        if (
+          this.requireCheckImmediatelyAfter &&
+          !['check', 'deprecatedCheck'].includes(op.type)
+        ) {
+          console.log(op.type)
+          console.log(op.type.length)
+          throw new Error(
+            'Missing checkUntil after running ' +
+            '\'requireCheckImmediatelyAfter\'.'
+          );
+        }
+
         if (op.type === 'sleep') {
           await this._do(commandArr.join(' '));
           commandArr = [];
           await _sleep(op.ms);
+        } else if (op.type === 'addCheckRequirement') {
+          this.requireCheckImmediatelyAfter = true;
         } else if (['run', 'check', 'deprecatedCheck'].includes(op.type)) {
           await this._do(commandArr.join(' '));
           commandArr = [];
@@ -838,6 +861,12 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
               throw new Error('You forgot to add ".do() "' +
                 'at the end of a subcommand.')
             }
+          }
+          if (
+            ['check', 'deprecatedCheck'].includes(op.type) &&
+            this.requireCheckImmediatelyAfter
+          ) {
+            this.requireCheckImmediatelyAfter = false;
           }
         } else {
           let nextOp = null;
@@ -940,7 +969,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           this.page.xjsLastPos.y = pos.y;
         } else if (op.type === 'click') {
           if (
-            op.mouseButton in [1, 2, 3] &&
+            [1, 2, 3].includes(op.mouseButton) &&
             op.selector && 
             (Array.isArray(op.selector) || typeof op.selector === 'string')
           ) {
@@ -971,7 +1000,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           }
         } else if (op.type === 'mousedown') {
           if (
-            op.mouseButton in [1, 2, 3] &&
+            [1, 2, 3].includes(op.mouseButton) &&
             op.selector &&
             (Array.isArray(op.selector) || typeof op.selector === 'string')
           ) {
@@ -1021,6 +1050,16 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
     if (commandArr.length) {
       await this._do(commandArr.join(' '));
     }
+    this.level -= 1;
+    if (this.level === 0 && this.requireCheckImmediatelyAfter) {
+      throw new Error(
+        'Missing checkUntil after running ' +
+        '\'requireCheckImmediatelyAfter\'.'
+      );
+    }
+  } catch (e) {
+    e.stack += '\n' + e.stack;
+    throw e;
   } finally {
     this.unsafe.pop();
     await _sleep(50);
