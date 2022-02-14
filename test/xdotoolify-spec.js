@@ -386,4 +386,56 @@ describe('xdotoolify', function() {
       ' as \'checkUntil\'.'
     );
   }));
+
+  it('should require check after addRequireCheckImmediatelyAfter', syncify(async function() {
+    let errorMsg = 'Nothing thrown';
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
+    let fnWithRequire = Xdotoolify.setupWithPage(
+      async (page) => {
+        await page.X
+            .addRequireCheckImmediatelyAfter().do();
+      }
+    );
+    const noop = () => {};
+
+    try {
+      await page.X
+          .run(goodFunc)
+          .do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    try {
+      await page.X
+          .run(goodFunc)
+          .run(fnWithRequire)
+          .do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe(
+      'Missing checkUntil after running ' +
+      '\'requireCheckImmediatelyAfter\'.'
+    );
+
+    errorMsg = null;
+
+    try {
+      await page.X
+          .run(goodFunc)
+          .addRequireCheckImmediatelyAfter()
+          .do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe(
+      'Missing checkUntil after running ' +
+      '\'requireCheckImmediatelyAfter\'.'
+    );
+  }));
 });
