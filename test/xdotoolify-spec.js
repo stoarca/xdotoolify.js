@@ -438,4 +438,40 @@ describe('xdotoolify', function() {
       '\'requireCheckImmediatelyAfter\'.'
     );
   }));
+
+  it('should compare objects', syncify(async function() {
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return {
+      a: 1,
+      b: 2
+    }; });
+
+    let errorMsg = 'Nothing thrown';
+
+    try {
+      await page.X.checkUntil(goodFunc, x => x, {
+        a: 1,
+        b: 2
+      }).do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    try {
+      await page.X.checkUntil(goodFunc, x => x, {
+        a: 2,
+        b: 2
+      }).do();
+    } catch (e) {
+      errorMsg = e.message;
+    }
+    expect(errorMsg).toBe(
+      'Timeout exceeded waiting for  called with  ' +
+      'to be {"a":2,"b":2}.\n' +
+      'Most recent value: {"a":1,"b":2}\n' +
+      'Most recent check result: {"a":1,"b":2}\n'
+    );
+
+  }));
 });
