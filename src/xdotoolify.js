@@ -761,7 +761,10 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
   
         if (
           this.requireCheckImmediatelyAfter &&
-          !['check', 'deprecatedCheck'].includes(op.type)
+          ![
+            'check',
+            'deprecatedCheck'
+          ].includes(op.type)
         ) {
           console.log(op.type)
           console.log(op.type.length)
@@ -894,7 +897,10 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           if (i < operations.length - 1) {
             nextOp = operations[i+1]
           }
-          if (!options.unsafe && op.checkAfter && (!nextOp || !['check'].includes(nextOp.type))) {
+          if (
+            !options.unsafe && op.checkAfter && (!nextOp ||
+            !['check', 'addCheckRequirement'].includes(nextOp.type))
+          ) {
             throw new Error('Missing checkUntil after interaction.')
           }
         }
@@ -1094,6 +1100,12 @@ _Xdotoolify.prototype.focus = async function() {
     childProcess.execSync('xdotool windowfocus ' + this.xWindowId);
     lastWindow = this.xWindowId;
     await _sleep(500);
+  }
+};
+
+_Xdotoolify.prototype.verify = async function() {
+  if (this.operations.length > 0) {
+    throw new Error('You forgot to call do() on some xdotoolify operation')
   }
 };
 
