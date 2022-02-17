@@ -1,4 +1,5 @@
 import childProcess from 'child_process';
+import equal from 'fast-deep-equal';
 
 var _sleep = function(time) {
   return new Promise(function(resolve) {
@@ -835,8 +836,15 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           if (op.until) {
             let expires = Date.now() + Xdotoolify.defaultCheckUntilTimeout;
             let mostRecent = null;
-            while ((mostRecent = await run(true))[1] !== op.value) {
+            while (
+              !equal(
+                (mostRecent = await run(true))[1],
+                op.value
+              )
+            ) {
               let mostRecentJSON;
+              let mostRecentCheckResult;
+              let valueJSON;
 
               try {
                 mostRecentJSON = JSON.stringify(mostRecent[0])
@@ -844,13 +852,26 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
                 mostRecentJSON = e;
               }
 
+              try {
+                mostRecentCheckResult = JSON.stringify(mostRecent[1])
+              } catch (e) {
+                mostRecentCheckResult = e;
+              }
+
+              try {
+                valueJSON = JSON.stringify(op.value)
+              } catch (e) {
+                valueJSON = e;
+              }
+
               if (Date.now() > expires) {
                 throw new Error(
                   'Timeout exceeded waiting for ' + op.func.name +
-                  ' called with ' + op.args.map(x => String(x)).join(', ') +
-                  ' to be ' + op.value + '.\n' +
+                  ' called with ' + op.args.map(x => x).join(', ') +
+                  ' to be ' + valueJSON + '.\n' +
                   'Most recent value: ' + mostRecentJSON + '\n' +
-                  'Most recent check result: ' + mostRecent[1] + '\n'
+                  'Most recent check result: ' +
+                  mostRecentCheckResult + '\n'
                 );
               }
               await _sleep(100);
