@@ -1,11 +1,11 @@
 {
   "name": "xdotoolify",
-  "version": "1.0.46",
+  "version": "1.0.47",
   "description": "xdotoolify simulates clicks and keystrokes in selenium in a way that is indistinguishable from a real user's actions",
   "main": "dist/xdotoolify.js",
   "scripts": {
     "build": "babel src --out-dir dist",
-    "prepublish": "npm run build",
+    "prepare": "npm run build",
     "test": "babel-node test.js"
   },
   "repository": {
