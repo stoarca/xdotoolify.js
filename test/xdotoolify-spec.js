@@ -24,18 +24,12 @@ describe('xdotoolify', function() {
   });
 
   it('should throw error on bad check', async function() {
-    let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => {});
-
-    try {
+    await expect(async () => {
       await page.X.check(goodFunc, () => { throw new Error('inside'); }).do({
         unsafe: true
       });
-    } catch (e) {
-      errorMsg = e.message;
-    }
-
-    expect(errorMsg).toContain('inside');
+    }).rejects.toThrow('inside');
   });
 
   it('should print check values on bad check', async function() {
@@ -75,23 +69,31 @@ describe('xdotoolify', function() {
   });
 
   it('should work with new checkUntil', async function() {
-    let stack = 'nothing';
     let goodFunc = Xdotoolify.setupWithPage((page) => [{a: 4}, {b: 6}]);
     await page.X
-        .checkUntil(goodFunc, x => {
-          try {
-            expect(x.a).toBe(4);
-          } catch (e) {
-            return false;
-          }
-          return true;
-        }, true)
+        .checkUntil(goodFunc, x => expect(x[0].a).toBe(4))
         .do({legacyCheckUntil: false});
 
     await expect(async () => {
       await page.X
-          .checkUntil(goodFunc, x => expect(x.a).toBe(5), true)
+          .checkUntil(goodFunc, x => expect(x[0].a).toBe(5))
           .do({legacyCheckUntil: false});
+    }).rejects.toThrow();
+
+    await page.X
+        .checkUntil(goodFunc, x => x[0].a === 4)
+        .do({legacyCheckUntil: false})
+
+    let valueFunc = Xdotoolify.setupWithPage((page) => 5);
+    await page.X
+        .checkUntil(valueFunc, 5)
+        .do({legacyCheckUntil: false})
+
+    await expect(async () => {
+      // legacy checkUntil should fail to prevent accidents
+      await page.X
+          .checkUntil(valueFunc, x => !!x, true)
+          .do({legacyCheckUntil: false})
     }).rejects.toThrow();
   }, 15000);
 

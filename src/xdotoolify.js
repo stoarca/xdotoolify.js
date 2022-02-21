@@ -363,18 +363,26 @@ _Xdotoolify.prototype.check = function(f, ...rest) {
     type: 'deprecatedCheck',
     func: f,
     args: rest.slice(0, rest.length - 1),
-    callback: rest[rest.length - 1],
+    callbackOrExpectedValue: rest[rest.length - 1],
   });
   return this;
 };
 _Xdotoolify.prototype.checkUntil = function(f, ...rest) {
+  // current format
+  // .checkUntil(myFunc, x => expect(x).toBe(5))
+  // .checkUntil(myFunc, x => x == 5)
+  // .checkUntil(myFunc, 5)
+  // legacy format
+  // .checkUntil(myFunc, x => x, 5)
   this._addOperation({
     type: 'check',
     func: f,
-    args: rest.slice(0, rest.length - 2),
-    callback: rest[rest.length - 2],
+    legacyArgs: rest.slice(0, rest.length - 2),
+    legacyCallbackOrExpectedValue: rest[rest.length - 2],
+    legacyValue: rest[rest.length - 1],
+    args: rest.slice(0, rest.length - 1),
+    callbackOrExpectedValue: rest[rest.length - 1],
     until: true,
-    value: rest[rest.length - 1],
   });
   return this;
 };
@@ -800,6 +808,10 @@ _Xdotoolify.prototype.do = async function(
               idMsg
             );
           }
+          if (op.until && legacyCheckUntil) {
+            op.args = op.legacyArgs;
+            op.callbackOrExpectedValue = op.legacyCallbackOrExpectedValue;
+          }
           let args = null;
           if (op.func._xdotoolifyWithPage) {
             args = [this.page, ...op.args];
@@ -808,15 +820,19 @@ _Xdotoolify.prototype.do = async function(
           }
           let run = async function(ignoreCallbackError) {
             let ret = await op.func.apply(null, args);
-            if (op.callback) {
-              if (op.callback.then) {
+            if (op.callbackOrExpectedValue !== undefined) {
+              if (op.callbackOrExpectedValue.then) {
                 throw new Error(
                   'Check callbacks should be synchronous. ' +
                       'Use multiple check() calls instead.'
                 );
               }
               try {
-                return [ret, op.callback(ret)];
+                if (typeof op.callbackOrExpectedValue === 'function') {
+                  return [ret, op.callbackOrExpectedValue(ret)];
+                } else {
+                  return [ret, ret === op.callbackOrExpectedValue];
+                }
               } catch (e) {
                 if (ignoreCallbackError) {
                   return [ret, e];
@@ -842,7 +858,7 @@ _Xdotoolify.prototype.do = async function(
               while (
                 !equal(
                   (mostRecent = await run(true))[1],
-                  op.value
+                  op.legacyValue
                 )
               ) {
                 let mostRecentJSON;
@@ -862,7 +878,7 @@ _Xdotoolify.prototype.do = async function(
                 }
 
                 try {
-                  valueJSON = JSON.stringify(op.value)
+                  valueJSON = JSON.stringify(op.legacyValue)
                 } catch (e) {
                   valueJSON = e;
                 }
@@ -881,12 +897,32 @@ _Xdotoolify.prototype.do = async function(
               }
             } else {
               while (true) {
-                let [result, error] = await run(true);
-                if (!(error instanceof Error)) {
+                let [result, errorOrCheck] = await run(true);
+                if (!(errorOrCheck instanceof Error) &&
+                    (errorOrCheck === true || errorOrCheck === undefined)) {
+                  // ^ this allws both:
+                  // 1. x => x == 5
+                  // 2. x => expect(x).toBe(5)
+                  // to be used as the callback
                   break;
                 }
                 if (Date.now() > expires) {
-                  throw error;
+                  let msg = 'The above error happened because ' +
+                      'checkUntil timed out for ' + op.func.name;
+                  if (errorOrCheck instanceof Error) {
+                    errorOrCheck.stack += '\n' + msg;
+                    throw errorOrCheck;
+                  } else {
+                    try {
+                      throw new Error(
+                        'Expected ' + JSON.stringify(result) +
+                        ' to be ' + String(op.callbackOrExpectedValue)
+                      );
+                    } catch (e) {
+                      e.stack += '\n' + msg;
+                      throw e;
+                    }
+                  }
                 }
                 await _sleep(100);
               }
