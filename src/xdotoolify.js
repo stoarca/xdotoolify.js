@@ -1,5 +1,5 @@
-import childProcess from 'child_process';
-import equal from 'fast-deep-equal';
+let childProcess = require('child_process');
+let equal = require('fast-deep-equal');
 
 var _sleep = function(time) {
   return new Promise(function(resolve) {
@@ -732,14 +732,18 @@ _Xdotoolify.prototype.autoType = function(
   );
 };
 
-_Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
+_Xdotoolify.prototype.do = async function(
+  // TODO: once we have trainsitioned most of the code from legacyCheckUntil
+  // we can set default to true
+  {unsafe = false, legacyCheckUntil = true} = {}
+) {
   this.level += 1;
   try {
     const isParentSafe = this.unsafe.length > 0 ?
       !this.unsafe[this.unsafe.length - 1] : false;
-    this.unsafe.push(options.unsafe);
+    this.unsafe.push(unsafe);
 
-    if (isParentSafe && options.unsafe) {
+    if (isParentSafe && unsafe) {
       throw new Error(
         'Unsafe do() calls are not allowed within ' +
         'safe ones.'
@@ -752,22 +756,17 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
       var op = operations[i];
 
       try {
-        if (!options.unsafe && op.type === 'deprecatedCheck') {
+        if (!unsafe && op.type === 'deprecatedCheck') {
           throw new Error(
             '\'check\' actions are now deprecated. Please rewrite' +
             ' as \'checkUntil\'.'
           )
         }
-  
+
         if (
           this.requireCheckImmediatelyAfter &&
-          ![
-            'check',
-            'deprecatedCheck'
-          ].includes(op.type)
+          !['check', 'deprecatedCheck' ].includes(op.type)
         ) {
-          console.log(op.type)
-          console.log(op.type.length)
           throw new Error(
             'Missing checkUntil after running ' +
             '\'requireCheckImmediatelyAfter\'.'
@@ -838,46 +837,59 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
           }
           if (op.until) {
             let expires = Date.now() + Xdotoolify.defaultCheckUntilTimeout;
-            let mostRecent = null;
-            while (
-              !equal(
-                (mostRecent = await run(true))[1],
-                op.value
-              )
-            ) {
-              let mostRecentJSON;
-              let mostRecentCheckResult;
-              let valueJSON;
+            if (legacyCheckUntil) {
+              let mostRecent = null;
+              while (
+                !equal(
+                  (mostRecent = await run(true))[1],
+                  op.value
+                )
+              ) {
+                let mostRecentJSON;
+                let mostRecentCheckResult;
+                let valueJSON;
 
-              try {
-                mostRecentJSON = JSON.stringify(mostRecent[0])
-              } catch (e) {
-                mostRecentJSON = e;
-              }
+                try {
+                  mostRecentJSON = JSON.stringify(mostRecent[0])
+                } catch (e) {
+                  mostRecentJSON = e;
+                }
 
-              try {
-                mostRecentCheckResult = JSON.stringify(mostRecent[1])
-              } catch (e) {
-                mostRecentCheckResult = e;
-              }
+                try {
+                  mostRecentCheckResult = JSON.stringify(mostRecent[1])
+                } catch (e) {
+                  mostRecentCheckResult = e;
+                }
 
-              try {
-                valueJSON = JSON.stringify(op.value)
-              } catch (e) {
-                valueJSON = e;
-              }
+                try {
+                  valueJSON = JSON.stringify(op.value)
+                } catch (e) {
+                  valueJSON = e;
+                }
 
-              if (Date.now() > expires) {
-                throw new Error(
-                  'Timeout exceeded waiting for ' + op.func.name +
-                  ' called with ' + op.args.map(x => x).join(', ') +
-                  ' to be ' + valueJSON + '.\n' +
-                  'Most recent value: ' + mostRecentJSON + '\n' +
-                  'Most recent check result: ' +
-                  mostRecentCheckResult + '\n'
-                );
+                if (Date.now() > expires) {
+                  throw new Error(
+                    'Timeout exceeded waiting for ' + op.func.name +
+                    ' called with ' + op.args.map(x => x).join(', ') +
+                    ' to be ' + valueJSON + '.\n' +
+                    'Most recent value: ' + mostRecentJSON + '\n' +
+                    'Most recent check result: ' +
+                    mostRecentCheckResult + '\n'
+                  );
+                }
+                await _sleep(100);
               }
-              await _sleep(100);
+            } else {
+              while (true) {
+                let [result, error] = await run(true);
+                if (!(error instanceof Error)) {
+                  break;
+                }
+                if (Date.now() > expires) {
+                  throw error;
+                }
+                await _sleep(100);
+              }
             }
           } else {
             await run(false);
@@ -898,7 +910,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
             nextOp = operations[i+1]
           }
           if (
-            !options.unsafe && op.checkAfter && (!nextOp ||
+            !unsafe && op.checkAfter && (!nextOp ||
             !['check', 'addCheckRequirement'].includes(nextOp.type))
           ) {
             throw new Error('Missing checkUntil after interaction.')
@@ -962,7 +974,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
               };
             }, pos);
           }
-          // warn when moving a mouse to the same location 
+          // warn when moving a mouse to the same location
           if (
             !this.page.xjsLastPos ||
               this.page.xjsLastPos.x === pos.x &&
@@ -997,7 +1009,7 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
         } else if (op.type === 'click') {
           if (
             [1, 2, 3].includes(op.mouseButton) &&
-            op.selector && 
+            op.selector &&
             (Array.isArray(op.selector) || typeof op.selector === 'string')
           ) {
             // clean up previous commands
@@ -1084,9 +1096,6 @@ _Xdotoolify.prototype.do = async function(options = {unsafe: false}) {
         '\'requireCheckImmediatelyAfter\'.'
       );
     }
-  } catch (e) {
-    e.stack += '\n' + e.stack;
-    throw e;
   } finally {
     this.unsafe.pop();
     await _sleep(50);
@@ -1131,4 +1140,4 @@ Xdotoolify.setupWithoutPage = function(f) {
   f._xdotoolifyWithPage = false;
   return f;
 };
-export default Xdotoolify;
+exports.default = Xdotoolify;

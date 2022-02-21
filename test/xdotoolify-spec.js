@@ -1,18 +1,16 @@
-import {syncify} from 'jasmine_test_utils';
-
-import Xdotoolify from '../src/xdotoolify';
+let Xdotoolify = require('../src/xdotoolify').default;
 
 let noop = () => {};
 
 describe('xdotoolify', function() {
   let page = null;
 
-  beforeEach(syncify(async function() {
+  beforeEach(async function() {
     page = {};
     Xdotoolify(page);
-  }));
+  });
 
-  it('should throw error if not setup', syncify(async function() {
+  it('should throw error if not setup', async function() {
     let errorMsg = 'No error thrown';
     let badFunc = () => {};
 
@@ -23,9 +21,9 @@ describe('xdotoolify', function() {
     }
 
     expect(errorMsg).toContain('you must call Xdotoolify.setupWithPage');
-  }));
+  });
 
-  it('should throw error on bad check', syncify(async function() {
+  it('should throw error on bad check', async function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => {});
 
@@ -38,9 +36,9 @@ describe('xdotoolify', function() {
     }
 
     expect(errorMsg).toContain('inside');
-  }));
+  });
 
-  it('should print check values on bad check', syncify(async function() {
+  it('should print check values on bad check', async function() {
     let errorMsg = 'Nothing thrown';
     let stack = 'nothing';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return [{a: 5}, 6]; });
@@ -56,9 +54,9 @@ describe('xdotoolify', function() {
 
     expect(errorMsg).toContain('inside');
     expect(stack).toContain(' [{"a":5},6]\n');
-  }));
+  });
 
-  it('should be able to handle circular objects in check', syncify(async function() {
+  it('should be able to handle circular objects in check', async function() {
     const circularObject = {};
     circularObject.b = circularObject;
 
@@ -74,9 +72,30 @@ describe('xdotoolify', function() {
     }
 
     expect(stack).toContain('Value being checked: TypeError: Converting circular structure to JSON');
-  }));
+  });
 
-  it('should print checkUntil values on bad check', syncify(async function() {
+  it('should work with new checkUntil', async function() {
+    let stack = 'nothing';
+    let goodFunc = Xdotoolify.setupWithPage((page) => [{a: 4}, {b: 6}]);
+    await page.X
+        .checkUntil(goodFunc, x => {
+          try {
+            expect(x.a).toBe(4);
+          } catch (e) {
+            return false;
+          }
+          return true;
+        }, true)
+        .do({legacyCheckUntil: false});
+
+    await expect(async () => {
+      await page.X
+          .checkUntil(goodFunc, x => expect(x.a).toBe(5), true)
+          .do({legacyCheckUntil: false});
+    }).rejects.toThrow();
+  }, 15000);
+
+  it('should print checkUntil values on bad check', async function() {
     let stack = 'nothing';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return [{a: 5}, 6]; });
 
@@ -88,9 +107,9 @@ describe('xdotoolify', function() {
 
     expect(stack).toContain(' [{"a":5},6]\n');
     expect(stack).toContain(' 5\n');
-  }));
+  });
 
-  it('should work with checkUntil', syncify(async function() {
+  it('should work with checkUntil', async function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
 
@@ -101,9 +120,9 @@ describe('xdotoolify', function() {
     }
 
     expect(errorMsg).toBe('Nothing thrown');
-  }));
+  });
 
-  it('should throw an error on checkUntil timeout', syncify(async function() {
+  it('should throw an error on checkUntil timeout', async function() {
     let stack = 'nothing';
 
     let value = 4;
@@ -123,9 +142,9 @@ describe('xdotoolify', function() {
     }
 
     expect(stack).toContain('Timeout exceeded waiting for  called with  to be 5.\n');
-  }));
+  });
 
-  it('should be able to customize checkUntil timeout', syncify(async function() {
+  it('should be able to customize checkUntil timeout', async function() {
     let stack = 'nothing';
 
     let value = 4;
@@ -149,9 +168,9 @@ describe('xdotoolify', function() {
     expect(stack).toContain('nothing');
 
     Xdotoolify.defaultCheckUntilTimeout = 3000;
-  }));
+  });
 
-  it('should be able to handle circular objects in checkUntil', syncify(async function() {
+  it('should be able to handle circular objects in checkUntil', async function() {
     const circularObject = {};
     circularObject.b = circularObject;
 
@@ -165,9 +184,9 @@ describe('xdotoolify', function() {
     }
 
     expect(errorMsg).toContain('Most recent value: TypeError: Converting circular structure to JSON');
-  }));
+  });
 
-  it('should throw error when missing do() at the end of run command', syncify(async function() {
+  it('should throw error when missing do() at the end of run command', async function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
     const withDo = Xdotoolify.setupWithPage((page) => {
@@ -197,11 +216,11 @@ describe('xdotoolify', function() {
     } catch (e) {
       errorMsg = e.message;
     }
-    
-    expect(errorMsg).toBe('You forgot to add ".do() "at the end of a subcommand.');
-  }));
 
-  it('should throw error when missing checkUntil after interaction', syncify(async function() {
+    expect(errorMsg).toBe('You forgot to add ".do() "at the end of a subcommand.');
+  });
+
+  it('should throw error when missing checkUntil after interaction', async function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
     let withCheck = Xdotoolify.setupWithPage((page) => {
@@ -251,7 +270,7 @@ describe('xdotoolify', function() {
     } catch (e) {
       errorMsg = e.message;
     }
-    
+
     expect(errorMsg).toBe('Unsafe do() calls are not allowed within safe ones.');
 
     withoutCheck = Xdotoolify.setupWithPage((page) => {
@@ -267,11 +286,11 @@ describe('xdotoolify', function() {
     } catch (e) {
       errorMsg = e.message;
     }
-    
-    expect(errorMsg).toBe('Missing checkUntil after interaction.');
-  }));
 
-  it('should handle safe calls after unsafe ones and nested calls', syncify(async function() {
+    expect(errorMsg).toBe('Missing checkUntil after interaction.');
+  });
+
+  it('should handle safe calls after unsafe ones and nested calls', async function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
 
@@ -304,7 +323,7 @@ describe('xdotoolify', function() {
     }
 
     expect(errorMsg).toBe('Nothing thrown');
-  
+
     let safelyWrappedWithoutCheckUnsafe = Xdotoolify.setupWithPage((page) => {
       return page.X
           .run(withoutCheckUnsafe)
@@ -356,9 +375,9 @@ describe('xdotoolify', function() {
     }
 
     expect(errorMsg).toBe('Missing checkUntil after interaction.');
-  }));
+  });
 
-  it('should not allow check statements in safe do call', syncify(async function() {
+  it('should not allow check statements in safe do call', async function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
     const noop = () => {};
@@ -385,9 +404,9 @@ describe('xdotoolify', function() {
       '\'check\' actions are now deprecated. Please rewrite' +
       ' as \'checkUntil\'.'
     );
-  }));
+  });
 
-  it('should require check after addRequireCheckImmediatelyAfter', syncify(async function() {
+  it('should require check after addRequireCheckImmediatelyAfter', async function() {
     let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
     let fnWithRequire = Xdotoolify.setupWithPage(
@@ -437,9 +456,9 @@ describe('xdotoolify', function() {
       'Missing checkUntil after running ' +
       '\'requireCheckImmediatelyAfter\'.'
     );
-  }));
+  });
 
-  it('should compare objects', syncify(async function() {
+  it('should compare objects', async function() {
     let goodFunc = Xdotoolify.setupWithPage((page) => { return {
       a: 1,
       b: 2
@@ -473,5 +492,5 @@ describe('xdotoolify', function() {
       'Most recent check result: {"a":1,"b":2}\n'
     );
 
-  }));
+  });
 });
