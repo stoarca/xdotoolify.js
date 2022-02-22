@@ -1176,4 +1176,5 @@ Xdotoolify.setupWithoutPage = function(f) {
   f._xdotoolifyWithPage = false;
   return f;
 };
+exports.__esModule = true;
 exports.default = Xdotoolify;
