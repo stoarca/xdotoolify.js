@@ -788,6 +788,12 @@ _Xdotoolify.prototype.do = async function(
         } else if (op.type === 'addCheckRequirement') {
           this.requireCheckImmediatelyAfter = true;
         } else if (['run', 'check', 'deprecatedCheck'].includes(op.type)) {
+          if (
+            ['check', 'deprecatedCheck'].includes(op.type) &&
+            this.requireCheckImmediatelyAfter
+          ) {
+            this.requireCheckImmediatelyAfter = false;
+          }
           await this._do(commandArr.join(' '));
           commandArr = [];
           if (op.func._xdotoolifyWithPage === undefined) {
@@ -933,12 +939,6 @@ _Xdotoolify.prototype.do = async function(
               throw new Error('You forgot to add ".do() "' +
                 'at the end of a subcommand.')
             }
-          }
-          if (
-            ['check', 'deprecatedCheck'].includes(op.type) &&
-            this.requireCheckImmediatelyAfter
-          ) {
-            this.requireCheckImmediatelyAfter = false;
           }
         } else {
           let nextOp = null;
