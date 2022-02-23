@@ -409,7 +409,6 @@ describe('xdotoolify', function() {
   });
 
   it('should require check after addRequireCheckImmediatelyAfter', async function() {
-    let errorMsg = 'Nothing thrown';
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
     let fnWithRequire = Xdotoolify.setupWithPage(
       async (page) => {
@@ -417,47 +416,44 @@ describe('xdotoolify', function() {
             .addRequireCheckImmediatelyAfter().do();
       }
     );
-    const noop = () => {};
 
-    try {
-      await page.X
-          .run(goodFunc)
-          .do();
-    } catch (e) {
-      errorMsg = e.message;
-    }
+    await page.X
+        .run(goodFunc)
+        .do({legacyCheckUntil: false});
 
-    expect(errorMsg).toBe('Nothing thrown');
-
-    try {
+    await expect(async () => {
       await page.X
           .run(goodFunc)
           .run(fnWithRequire)
-          .do();
-    } catch (e) {
-      errorMsg = e.message;
-    }
+          .do({legacyCheckUntil: false});
+    }).rejects.toThrow('Missing checkUntil after running \'requireCheckImmediatelyAfter\'');
 
-    expect(errorMsg).toBe(
-      'Missing checkUntil after running ' +
-      '\'requireCheckImmediatelyAfter\'.'
-    );
-
-    errorMsg = null;
-
-    try {
+    await expect(async () => {
       await page.X
           .run(goodFunc)
           .addRequireCheckImmediatelyAfter()
           .do();
-    } catch (e) {
-      errorMsg = e.message;
-    }
+    }).rejects.toThrow('Missing checkUntil after running \'requireCheckImmediatelyAfter\'');
+  });
 
-    expect(errorMsg).toBe(
-      'Missing checkUntil after running ' +
-      '\'requireCheckImmediatelyAfter\'.'
+  it('should accept check after addRequireCheckImmediatelyAfter', async function() {
+    let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
+    let fnWithRequire = Xdotoolify.setupWithPage(
+      async (page) => {
+        await page.X
+            .addRequireCheckImmediatelyAfter().do();
+      }
     );
+
+    await page.X
+        .run(goodFunc)
+        .run(fnWithRequire)
+        .checkUntil(
+          goodFunc,
+          x => x,
+          5
+        )
+        .do({legacyCheckUntil: false});
   });
 
   it('should compare objects', async function() {
@@ -466,33 +462,64 @@ describe('xdotoolify', function() {
       b: 2
     }; });
 
-    let errorMsg = 'Nothing thrown';
+    await page.X.checkUntil(
+      goodFunc,
+      x => expect(x).toStrictEqual({a: 1, b: 2})
+    ).do({legacyCheckUntil: false});
+    
+    await expect(async () => {
+      await page.X.checkUntil(
+        goodFunc,
+        x => expect(x).toStrictEqual({a: 2, b: 2})
+      ).do({legacyCheckUntil: false});
+    }).rejects.toThrow('\"a\": 2')
+  });
 
-    try {
-      await page.X.checkUntil(goodFunc, x => x, {
-        a: 1,
-        b: 2
-      }).do();
-    } catch (e) {
-      errorMsg = e.message;
-    }
+  it('should accept Xdotoolify.defer as argument', async function() {
+    let goodFunc = Xdotoolify.setupWithPage(async (page) => { return {
+      a: 1,
+      b: 2
+    }; });
 
-    expect(errorMsg).toBe('Nothing thrown');
+    let funcWithArgs = Xdotoolify.setupWithPage((page, arg) => { return arg; });
 
-    try {
-      await page.X.checkUntil(goodFunc, x => x, {
-        a: 2,
-        b: 2
-      }).do();
-    } catch (e) {
-      errorMsg = e.message;
-    }
-    expect(errorMsg).toBe(
-      'Timeout exceeded waiting for  called with  ' +
-      'to be {"a":2,"b":2}.\n' +
-      'Most recent value: {"a":1,"b":2}\n' +
-      'Most recent check result: {"a":1,"b":2}\n'
-    );
+    await page.X
+        .checkUntil(
+          funcWithArgs,
+          Xdotoolify.defer(async (_page) => {
+            return (await goodFunc(page)).a;
+          }, page),
+          x => x,
+          1
+        )
+        .do({legacyCheckUntil: false})
 
+    await page.X
+        .checkUntil(
+          funcWithArgs,
+          Xdotoolify.defer(() => {
+            return 3;
+          }),
+          x => x,
+          3
+        )
+        .do({legacyCheckUntil: false})
+  });
+
+  it('should be able to use saved values', async function() {
+    let funcWithArgs = Xdotoolify.setupWithPage((page, arg) => { return arg; });
+
+    let val;
+    await page.X.run(
+        Xdotoolify.setupWithPage((page) => {
+            val = funcWithArgs(page, 60);
+          })
+        )
+        .checkUntil(
+          funcWithArgs,
+          60,
+          x => expect(x).toBe(val)
+        )
+        .do({legacyCheckUntil: false})
   });
 });

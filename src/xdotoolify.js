@@ -824,7 +824,13 @@ _Xdotoolify.prototype.do = async function(
           } else {
             args = op.args;
           }
+
           let run = async function(ignoreCallbackError) {
+            for (let j = 0; j < args.length ; j++) {
+              if (args[j] && typeof args[j] === 'object' && 'getArgument' in args[j]) {
+                args[j] = await args[j].getArgument();
+              }
+            }
             let ret = await op.func.apply(null, args);
             if (op.callbackOrExpectedValue !== undefined) {
               if (op.callbackOrExpectedValue.then) {
@@ -834,10 +840,11 @@ _Xdotoolify.prototype.do = async function(
                 );
               }
               try {
-                if (typeof op.callbackOrExpectedValue === 'function') {
+                let callbackOrExpectedValue = op.callbackOrExpectedValue;
+                if (typeof callbackOrExpectedValue === 'function') {
                   return [ret, op.callbackOrExpectedValue(ret)];
                 } else {
-                  return [ret, ret === op.callbackOrExpectedValue];
+                  return [ret, ret === callbackOrExpectedValue];
                 }
               } catch (e) {
                 if (ignoreCallbackError) {
@@ -859,12 +866,13 @@ _Xdotoolify.prototype.do = async function(
           }
           if (op.until) {
             let expires = Date.now() + Xdotoolify.defaultCheckUntilTimeout;
+            let legacyValue = op.legacyValue;
             if (legacyCheckUntil) {
               let mostRecent = null;
               while (
                 !equal(
                   (mostRecent = await run(true))[1],
-                  op.legacyValue
+                  legacyValue
                 )
               ) {
                 let mostRecentJSON;
@@ -884,7 +892,7 @@ _Xdotoolify.prototype.do = async function(
                 }
 
                 try {
-                  valueJSON = JSON.stringify(op.legacyValue)
+                  valueJSON = JSON.stringify(legacyValue)
                 } catch (e) {
                   valueJSON = e;
                 }
@@ -1164,6 +1172,13 @@ _Xdotoolify.prototype._do = async function(command) {
 
 var Xdotoolify = function(page, xjsLastPos) {
   page.X = new _Xdotoolify(page, xjsLastPos);
+};
+Xdotoolify.defer = function(f, ...rest) {
+  return {
+    getArgument: async () => {
+      return await f(...rest);
+    }
+  };
 };
 
 Xdotoolify.defaultCheckUntilTimeout = 3000;
