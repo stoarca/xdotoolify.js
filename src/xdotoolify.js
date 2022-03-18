@@ -10,7 +10,7 @@ var _sleep = function(time) {
 const _waitForClickAction = async function(page, timeout) {
   let expires = Date.now() + timeout;
 
-  return new Promise(async (resolve) => {
+  return new Promise(async (resolve, reject) => {
     let clickInfo;
     while (Date.now() < expires) {
       clickInfo = await page.executeScript(function() {
