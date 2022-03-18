@@ -19,15 +19,22 @@ const _waitForClickAction = async function(page, timeout) {
       if (!clickInfo || clickInfo.registered) { break; }
       await _sleep(50);
     }
-    if (!clickInfo || (clickInfo.registered && !clickInfo.error)) {
+    if (!clickInfo) {
       resolve(null);
       return;
-    } else {
-      resolve(clickInfo.error);
+    }
+    if (!clickInfo.registered) {
+      reject(new Error(
+        'Timed out while waiting for click to be registered.'
+      ));
       return;
     }
-    resolve('Timed out while waiting for click to be registered.');
-  })
+    if (clickInfo.error) {
+      reject(new Error(clickInfo.error));
+      return;
+    }
+    resolve(null);
+  });
 };
 
 var _addClickHandler = async function(page, selector, eventType) {
@@ -1068,14 +1075,7 @@ _Xdotoolify.prototype.do = async function(
             }
             commandArr.push(`click ${op.mouseButton}`);
             await this._do(commandArr.join(' '));
-            try {
-              const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
-              if (clickError) {
-                throw new Error(clickError);
-              }
-            } catch (e) {
-              throw new Error(e);
-            }
+            await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
             await _sleep(50);
             commandArr = [];
           } else {
@@ -1099,14 +1099,7 @@ _Xdotoolify.prototype.do = async function(
             }
             commandArr.push(`mousedown ${op.mouseButton}`);
             await this._do(commandArr.join(' '));
-            try {
-              const clickError = await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
-              if (clickError) {
-                throw new Error(clickError);
-              }
-            } catch (e) {
-              throw new Error(e);
-            }
+            await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
             await _sleep(50);
             commandArr = [];
           } else {
