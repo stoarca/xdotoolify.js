@@ -72,28 +72,28 @@ describe('xdotoolify', function() {
     let goodFunc = Xdotoolify.setupWithPage((page) => [{a: 4}, {b: 6}]);
     await page.X
         .checkUntil(goodFunc, x => expect(x[0].a).toBe(4))
-        .do({legacyCheckUntil: false});
+        .do();
 
     await expect(async () => {
       await page.X
           .checkUntil(goodFunc, x => expect(x[0].a).toBe(5))
-          .do({legacyCheckUntil: false});
+          .do();
     }).rejects.toThrow();
 
     await page.X
-        .checkUntil(goodFunc, x => x[0].a === 4)
-        .do({legacyCheckUntil: false})
+        .checkUntil(goodFunc, x => expect(x[0].a).toBe(4))
+        .do()
 
     let valueFunc = Xdotoolify.setupWithPage((page) => 5);
     await page.X
         .checkUntil(valueFunc, 5)
-        .do({legacyCheckUntil: false})
+        .do()
 
     await expect(async () => {
       // legacy checkUntil should fail to prevent accidents
       await page.X
           .checkUntil(valueFunc, x => !!x, true)
-          .do({legacyCheckUntil: false})
+          .do()
     }).rejects.toThrow();
   }, 15000);
 
@@ -102,13 +102,14 @@ describe('xdotoolify', function() {
     let goodFunc = Xdotoolify.setupWithPage((page) => { return [{a: 5}, 6]; });
 
     try {
-      await page.X.checkUntil(goodFunc, x => x[0].a, 4).do();
+      await page.X.checkUntil(goodFunc, x => expect(x[0].a).toBe(4)).do();
     } catch (e) {
       stack = e.stack;
     }
 
-    expect(stack).toContain(' [{"a":5},6]\n');
-    expect(stack).toContain(' 5\n');
+    expect(stack).toContain(
+      'Expected: \u001b[32m4\u001b[39m\nReceived: \u001b[31m5\u001b[39m'
+    );
   });
 
   it('should work with checkUntil', async function() {
@@ -116,7 +117,7 @@ describe('xdotoolify', function() {
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
 
     try {
-      await page.X.checkUntil(goodFunc, x => x * 2, 10).do();
+      await page.X.checkUntil(goodFunc, x => expect(x * 2).toBe(10)).do();
     } catch (e) {
       errorMsg = e.message;
     }
@@ -138,12 +139,12 @@ describe('xdotoolify', function() {
     }, 4000)
 
     try {
-      await page.X.checkUntil(slowFunc, x => x, 5).do();
+      await page.X.checkUntil(slowFunc, 5).do();
     } catch (e) {
       stack = e.stack;
     }
 
-    expect(stack).toContain('Timeout exceeded waiting for  called with  to be 5.\n');
+    expect(stack).toContain('Error: Expected 4 to be 5\n');
   });
 
   it('should be able to customize checkUntil timeout', async function() {
@@ -162,7 +163,7 @@ describe('xdotoolify', function() {
     }, 4000)
 
     try {
-      await page.X.checkUntil(slowFunc, x => x, 5).do();
+      await page.X.checkUntil(slowFunc, 5).do();
     } catch (e) {
       stack = e.stack;
     }
@@ -185,7 +186,7 @@ describe('xdotoolify', function() {
       errorMsg = e.message;
     }
 
-    expect(errorMsg).toContain('Most recent value: TypeError: Converting circular structure to JSON');
+    expect(errorMsg).toContain('Converting circular structure to JSON');
   });
 
   it('should throw error when missing do() at the end of run command', async function() {
@@ -193,18 +194,18 @@ describe('xdotoolify', function() {
     let goodFunc = Xdotoolify.setupWithPage((page) => { return 5; });
     const withDo = Xdotoolify.setupWithPage((page) => {
       return page.X
-          .checkUntil(goodFunc, x => x * 2, 10)
+          .checkUntil(goodFunc, x => expect(x * 2).toBe(10))
           .do();
     });
     const withoutDo = Xdotoolify.setupWithPage((page) => {
       return page.X
-          .checkUntil(goodFunc, x => x * 2, 10);
+          .checkUntil(goodFunc, x => expect(x * 2).toBe(10));
     });
 
     try {
       await page.X
           .run(withDo)
-          .checkUntil(goodFunc, x => x * 2, 10).do();
+          .checkUntil(goodFunc, x => expect(x * 2).toBe(10)).do();
     } catch (e) {
       errorMsg = e.message;
     }
@@ -214,7 +215,7 @@ describe('xdotoolify', function() {
     try {
       await page.X
           .run(withoutDo)
-          .checkUntil(goodFunc, x => x * 2, 10).do();
+          .checkUntil(goodFunc, x => expect(x * 2).toBe(10)).do();
     } catch (e) {
       errorMsg = e.message;
     }
@@ -228,7 +229,7 @@ describe('xdotoolify', function() {
     let withCheck = Xdotoolify.setupWithPage((page) => {
       return page.X
           .click()
-          .checkUntil(goodFunc, x => x * 2, 10)
+          .checkUntil(goodFunc, x => expect(x * 2).toBe(10))
           .do();
     });
 
@@ -245,7 +246,24 @@ describe('xdotoolify', function() {
     withCheck = Xdotoolify.setupWithPage((page) => {
       return page.X
           .click()
-          .checkNothing()
+          .veryDangerousCheckNothing()
+          .do({unsafe: true});
+    });
+
+    try {
+      await page.X
+          .run(withCheck)
+          .do({unsafe: true});
+    } catch (e) {
+      errorMsg = e.message;
+    }
+
+    expect(errorMsg).toBe('Nothing thrown');
+
+    withCheck = Xdotoolify.setupWithPage((page) => {
+      return page.X
+          .click()
+          .veryDangerousCheckNothing()
           .do();
     });
 
@@ -257,7 +275,9 @@ describe('xdotoolify', function() {
       errorMsg = e.message;
     }
 
-    expect(errorMsg).toBe('Nothing thrown');
+    expect(errorMsg).toBe(
+      '"checkNothing" is only valid inside unsafe do() calls.'
+    );
 
     let withoutCheck = Xdotoolify.setupWithPage((page) => {
       return page.X
@@ -299,7 +319,7 @@ describe('xdotoolify', function() {
     let withCheck = Xdotoolify.setupWithPage((page) => {
       return page.X
           .click()
-          .checkUntil(goodFunc, x => x * 2, 10)
+          .checkUntil(goodFunc, x => expect(x * 2).toBe(10))
           .do();
     });
     let withoutCheckUnsafe = Xdotoolify.setupWithPage((page) => {
@@ -339,7 +359,7 @@ describe('xdotoolify', function() {
     let safelyWrappedWithCheckSafe = Xdotoolify.setupWithPage((page) => {
       return page.X
           .run(withCheck)
-          .checkUntil(goodFunc, x => x * 2, 10)
+          .checkUntil(goodFunc, x => expect(x * 2).toBe(10))
           .do();
     });
 
@@ -419,13 +439,13 @@ describe('xdotoolify', function() {
 
     await page.X
         .run(goodFunc)
-        .do({legacyCheckUntil: false});
+        .do();
 
     await expect(async () => {
       await page.X
           .run(goodFunc)
           .run(fnWithRequire)
-          .do({legacyCheckUntil: false});
+          .do();
     }).rejects.toThrow('Missing checkUntil after running \'requireCheckImmediatelyAfter\'');
 
     await expect(async () => {
@@ -450,10 +470,9 @@ describe('xdotoolify', function() {
         .run(fnWithRequire)
         .checkUntil(
           goodFunc,
-          x => x,
           5
         )
-        .do({legacyCheckUntil: false});
+        .do();
   });
 
   it('should compare objects', async function() {
@@ -465,13 +484,13 @@ describe('xdotoolify', function() {
     await page.X.checkUntil(
       goodFunc,
       x => expect(x).toStrictEqual({a: 1, b: 2})
-    ).do({legacyCheckUntil: false});
+    ).do();
     
     await expect(async () => {
       await page.X.checkUntil(
         goodFunc,
         x => expect(x).toStrictEqual({a: 2, b: 2})
-      ).do({legacyCheckUntil: false});
+      ).do();
     }).rejects.toThrow('\"a\": 2')
   });
 
@@ -489,10 +508,9 @@ describe('xdotoolify', function() {
           Xdotoolify.defer(async (_page) => {
             return (await goodFunc(page)).a;
           }, page),
-          x => x,
           1
         )
-        .do({legacyCheckUntil: false})
+        .do()
 
     await page.X
         .checkUntil(
@@ -500,10 +518,9 @@ describe('xdotoolify', function() {
           Xdotoolify.defer(() => {
             return 3;
           }),
-          x => x,
           3
         )
-        .do({legacyCheckUntil: false})
+        .do()
   });
 
   it('should be able to use saved values', async function() {
@@ -520,6 +537,6 @@ describe('xdotoolify', function() {
           60,
           x => expect(x).toBe(val)
         )
-        .do({legacyCheckUntil: false})
+        .do()
   });
 });
