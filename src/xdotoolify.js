@@ -399,13 +399,11 @@ _Xdotoolify.prototype.addRequireCheckImmediatelyAfter = function() {
   });
   return this;
 };
-_Xdotoolify.prototype.checkNothing = function() {
-  let emptyFunc = Xdotoolify.setupWithPage((page) => { return true; });
-  return this.checkUntil(
-    emptyFunc,
-    x => x,
-    true
-  );
+_Xdotoolify.prototype.veryDangerousCheckNothing = function() {
+  this._addOperation({
+    type: 'checkNothing'
+  });
+  return this;
 };
 // internal versions of interaction functions do not
 // check for the presence of checkUntil after them
@@ -748,9 +746,7 @@ _Xdotoolify.prototype.autoType = function(
 };
 
 _Xdotoolify.prototype.do = async function(
-  // TODO: once we have trainsitioned most of the code from legacyCheckUntil
-  // we can set default to true
-  {unsafe = false, legacyCheckUntil = true} = {}
+  {unsafe = false, legacyCheckUntil = false} = {}
 ) {
   this.level += 1;
   try {
@@ -780,12 +776,26 @@ _Xdotoolify.prototype.do = async function(
 
         if (
           this.requireCheckImmediatelyAfter &&
-          !['check', 'deprecatedCheck' ].includes(op.type)
+          !['check', 'deprecatedCheck', 'checkNothing'].includes(op.type)
         ) {
           throw new Error(
             'Missing checkUntil after running ' +
             '\'requireCheckImmediatelyAfter\'.'
           );
+        }
+
+        if (op.type === 'checkNothing') {
+          if (unsafe) {
+            continue;
+          }
+          throw new Error(
+            '"checkNothing" is only valid inside unsafe ' +
+            'do() calls.'
+          )
+        }
+
+        if (unsafe && op.type === 'checkNothing') {
+          continue;
         }
 
         if (op.type === 'sleep') {
@@ -794,9 +804,9 @@ _Xdotoolify.prototype.do = async function(
           await _sleep(op.ms);
         } else if (op.type === 'addCheckRequirement') {
           this.requireCheckImmediatelyAfter = true;
-        } else if (['run', 'check', 'deprecatedCheck'].includes(op.type)) {
+        } else if (['run', 'check', 'deprecatedCheck', 'checkNothing'].includes(op.type)) {
           if (
-            ['check', 'deprecatedCheck'].includes(op.type) &&
+            ['check', 'deprecatedCheck', 'checkNothing'].includes(op.type) &&
             this.requireCheckImmediatelyAfter
           ) {
             this.requireCheckImmediatelyAfter = false;
@@ -962,7 +972,7 @@ _Xdotoolify.prototype.do = async function(
           }
           if (
             !unsafe && op.checkAfter && (!nextOp ||
-            !['check', 'addCheckRequirement'].includes(nextOp.type))
+            !['check', 'addCheckRequirement', 'checkNothing'].includes(nextOp.type))
           ) {
             throw new Error('Missing checkUntil after interaction.')
           }
