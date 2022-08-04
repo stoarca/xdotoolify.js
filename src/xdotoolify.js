@@ -1085,7 +1085,19 @@ _Xdotoolify.prototype.do = async function(
             }
             commandArr.push(`click ${op.mouseButton}`);
             await this._do(commandArr.join(' '));
-            await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+            try {
+              // TO DO: It seems that Firefox sometimes swallows clicks
+              // when passing from one textarea to another. This needs
+              // to be investigated. For now, it suffices to alert
+              // in the case of these "missed clicks" in case that
+              // they correspond to actual failures.
+              await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+            } catch (e) {
+              console.warn(
+                'Click was not registered. Not necessarily a failure ' +
+                'unless it is accompanied by one.'
+              );
+            }
             await _sleep(50);
             commandArr = [];
           } else {
@@ -1109,7 +1121,14 @@ _Xdotoolify.prototype.do = async function(
             }
             commandArr.push(`mousedown ${op.mouseButton}`);
             await this._do(commandArr.join(' '));
-            await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+            try {
+              await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
+            } catch (e) {
+              console.warn(
+                'Click was not registered. Not necessarily a failure ' +
+                'unless it is accompanied by one.'
+              );
+            }
             await _sleep(50);
             commandArr = [];
           } else {
