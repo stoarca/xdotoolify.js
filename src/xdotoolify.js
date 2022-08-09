@@ -24,13 +24,17 @@ const _waitForClickAction = async function(page, timeout) {
       return;
     }
     if (!clickInfo.registered) {
-      reject(new Error(
-        'Timed out while waiting for click to be registered.'
-      ));
+      reject(new Error({
+        message: 'Timed out while waiting for click to be registered.',
+        errorCode: 'click.timeOut'
+      }));
       return;
     }
     if (clickInfo.error) {
-      reject(new Error(clickInfo.error));
+      reject(new Error({
+        message: clickInfo.error,
+        errorCode: 'click.wrongElement'
+      }));
       return;
     }
     resolve(null);
@@ -1093,10 +1097,14 @@ _Xdotoolify.prototype.do = async function(
               // they correspond to actual failures.
               await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
             } catch (e) {
-              console.warn(
-                'Click was not registered. Not necessarily a failure ' +
-                'unless it is accompanied by one.'
-              );
+              if (e.errorCode === 'click.timeOut') {
+                console.warn(
+                  'Click was not registered. Not necessarily a failure ' +
+                  'unless it is accompanied by one.'
+                );
+              } else {
+                throw e;
+              }
             }
             await _sleep(50);
             commandArr = [];
@@ -1124,10 +1132,14 @@ _Xdotoolify.prototype.do = async function(
             try {
               await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
             } catch (e) {
-              console.warn(
-                'Click was not registered. Not necessarily a failure ' +
-                'unless it is accompanied by one.'
-              );
+              if (e.errorCode === 'click.timeOut') {
+                console.warn(
+                  'Click was not registered. Not necessarily a failure ' +
+                  'unless it is accompanied by one.'
+                );
+              } else {
+                throw e;
+              }
             }
             await _sleep(50);
             commandArr = [];
