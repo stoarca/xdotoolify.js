@@ -24,17 +24,19 @@ const _waitForClickAction = async function(page, timeout) {
       return;
     }
     if (!clickInfo.registered) {
-      reject(new Error({
-        message: 'Timed out while waiting for click to be registered.',
-        errorCode: 'click.timeOut'
-      }));
+      const error = new Error(
+        'Timed out while waiting for click to be registered.'
+      );
+      error.errorCode = 'click.timeOut';
+      reject(error);
       return;
     }
     if (clickInfo.error) {
-      reject(new Error({
-        message: clickInfo.error,
-        errorCode: 'click.wrongElement'
-      }));
+      const error = new Error(
+        'Timed out while waiting for click to be registered.'
+      );
+      error.errorCode = 'click.wrongElement';
+      reject(error);
       return;
     }
     resolve(null);
