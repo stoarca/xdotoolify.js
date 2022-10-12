@@ -163,6 +163,9 @@ var _getElementAndBrowserRect = async function(page, selector) {
         element = element.parentElement;
         var style = window.getComputedStyle(element);
         var overflow = style.overflow + style.overflowX + style.overflowY;
+        if (style.position === 'fixed') {
+          break;
+        }
         if (/auto|scroll|hidden/.test(overflow)) {
           rect = intersectRects(rect, element.getBoundingClientRect());
           if (!rect) {
