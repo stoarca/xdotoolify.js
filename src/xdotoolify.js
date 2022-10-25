@@ -32,9 +32,7 @@ const _waitForClickAction = async function(page, timeout) {
       return;
     }
     if (clickInfo.error) {
-      const error = new Error(
-        'Timed out while waiting for click to be registered.'
-      );
+      const error = new Error(clickInfo.error);
       error.errorCode = 'click.wrongElement';
       reject(error);
       return;
@@ -45,6 +43,7 @@ const _waitForClickAction = async function(page, timeout) {
 
 var _addClickHandler = async function(page, selector, eventType) {
   await page.executeScript(function(_selector, _eventType) {
+    console.log('starting to add click handler')
     window.selectedEl = Array.isArray(_selector) ? (
       document.querySelectorAll(_selector[0])[_selector[1]]
     ) : document.querySelector(_selector);
@@ -135,6 +134,7 @@ var _addClickHandler = async function(page, selector, eventType) {
         window.clickInfo.error = (errorMsg + genericMessage);
       }
     }, {once: true, capture: true});
+    console.log('finished adding click handler')
     window.handlerActive = true;
   }, selector, eventType);
 };
@@ -1088,12 +1088,14 @@ _Xdotoolify.prototype.do = async function(
             commandArr = [];
 
             try {
+              await this.page.executeScript(() => console.log('adding click handler'))
               await _addClickHandler(this.page, op.selector, 'click');
+              await this.page.executeScript(() => console.log('click handler added'))
             } catch (e) {
               throw new Error(e);
             }
             commandArr.push(`click ${op.mouseButton}`);
-            await this._do(commandArr.join(' '));
+            await this._do(commandArr.join(' '), this.page);
             try {
               // TO DO: It seems that Firefox sometimes swallows clicks
               // when passing from one textarea to another. This needs
@@ -1201,9 +1203,12 @@ _Xdotoolify.prototype.verify = async function() {
   }
 };
 
-_Xdotoolify.prototype._do = async function(command) {
+_Xdotoolify.prototype._do = async function(command, page = null) {
   await this.focus();
   if (command) {
+    if (page) {
+      await page.executeScript(() => console.log('clicking'));
+    }
     //console.log('command is ' + command);
     childProcess.execSync('xdotool ' + command);
   }
