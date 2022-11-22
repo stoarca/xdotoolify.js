@@ -7,6 +7,30 @@ var _sleep = function(time) {
   });
 };
 
+const _waitForDOM = async function(page, timeout) {
+  let expires = Date.now() + timeout;
+
+  if (!page || page.executeScript) { return; }
+
+  return new Promise(async (resolve, reject) => {
+    const i = setInterval(async () => {
+      const readyState = await page.executeScript(function() {
+        return document.readyState;
+      });
+
+      if (readyState === 'complete') {
+        clearInterval(i);
+        resolve();
+      } else if (Date.now() > expires) {
+        const url = await page.executeScript(function() {
+          return document.URL;
+        });
+        reject('Timed out while waiting for DOM to load.');
+      }
+    }, 100);
+  });
+};
+
 const _waitForClickAction = async function(page, timeout) {
   let expires = Date.now() + timeout;
 
@@ -1205,6 +1229,7 @@ _Xdotoolify.prototype.verify = async function() {
 
 _Xdotoolify.prototype._do = async function(command, page = null) {
   await this.focus();
+  await _waitForDOM(page, Xdotoolify.defaultCheckUntilTimeout); 
   if (command) {
     if (page) {
       await page.executeScript(() => console.log('clicking'));
