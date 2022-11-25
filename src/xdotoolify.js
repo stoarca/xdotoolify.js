@@ -10,7 +10,7 @@ var _sleep = function(time) {
 const _waitForDOM = async function(page, timeout) {
   let expires = Date.now() + timeout;
 
-  if (!page || page.executeScript) { return; }
+  if (!(page && page.executeScript)) { return; }
 
   return new Promise(async (resolve, reject) => {
     const i = setInterval(async () => {
@@ -832,7 +832,7 @@ _Xdotoolify.prototype.do = async function(
         }
 
         if (op.type === 'sleep') {
-          await this._do(commandArr.join(' '));
+          await this._do(commandArr.join(' '), this.page);
           commandArr = [];
           await _sleep(op.ms);
         } else if (op.type === 'addCheckRequirement') {
@@ -844,7 +844,7 @@ _Xdotoolify.prototype.do = async function(
           ) {
             this.requireCheckImmediatelyAfter = false;
           }
-          await this._do(commandArr.join(' '));
+          await this._do(commandArr.join(' '), this.page);
           commandArr = [];
           if (op.func._xdotoolifyWithPage === undefined) {
             let funcName = op.func.name || 'anonymous';
@@ -1019,12 +1019,12 @@ _Xdotoolify.prototype.do = async function(
             pos.x > 0 ?  pos.x - 1 : pos.x + 1
           } ${pos.y}`);
           commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
-          await this._do(commandArr.join(' '));
+          await this._do(commandArr.join(' '), this.page);
           await _sleep(50);
           commandArr = [];
         }
         if (op.type === 'mousemove') {
-          await this._do(commandArr.join(' '));
+          await this._do(commandArr.join(' '), this.page);
           commandArr = [];
 
           var pos = op.selector;
@@ -1090,12 +1090,12 @@ _Xdotoolify.prototype.do = async function(
               y: (this.page.xjsLastPos.y + pos.y) / 2,
             };
             commandArr.push(`mousemove --sync ${midPoint.x} ${midPoint.y}`);
-            await this._do(commandArr.join(' '));
+            await this._do(commandArr.join(' '), this.page);
             await _sleep(50);
             commandArr = [];
           }
           commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
-          await this._do(commandArr.join(' '));
+          await this._do(commandArr.join(' '), this.page);
           await _sleep(50);
           commandArr = [];
           this.page.xjsLastPos.x = pos.x;
@@ -1107,7 +1107,7 @@ _Xdotoolify.prototype.do = async function(
             (Array.isArray(op.selector) || typeof op.selector === 'string')
           ) {
             // clean up previous commands
-            await this._do(commandArr.join(' '));
+            await this._do(commandArr.join(' '), this.page);
             await _sleep(50);
             commandArr = [];
 
@@ -1149,7 +1149,7 @@ _Xdotoolify.prototype.do = async function(
             (Array.isArray(op.selector) || typeof op.selector === 'string')
           ) {
             // clean up previous commands
-            await this._do(commandArr.join(' '));
+            await this._do(commandArr.join(' '), this.page);
             await _sleep(50);
             commandArr = [];
 
@@ -1159,7 +1159,7 @@ _Xdotoolify.prototype.do = async function(
               throw new Error(e);
             }
             commandArr.push(`mousedown ${op.mouseButton}`);
-            await this._do(commandArr.join(' '));
+            await this._do(commandArr.join(' '), this.page);
             try {
               await _waitForClickAction(this.page, Xdotoolify.defaultCheckUntilTimeout);
             } catch (e) {
@@ -1183,7 +1183,7 @@ _Xdotoolify.prototype.do = async function(
           commandArr.push(`key ${op.key}`);
         } else if (op.type === 'type') {
           commandArr.push(`type ${JSON.stringify(op.text)}`);
-          await this._do(commandArr.join(' '));
+          await this._do(commandArr.join(' '), this.page);
           commandArr = [];
         }
       } catch (e) {
@@ -1196,7 +1196,7 @@ _Xdotoolify.prototype.do = async function(
       }
     }
     if (commandArr.length) {
-      await this._do(commandArr.join(' '));
+      await this._do(commandArr.join(' '), this.page);
     }
     this.level -= 1;
     if (this.level === 0 && this.requireCheckImmediatelyAfter) {
@@ -1231,7 +1231,7 @@ _Xdotoolify.prototype._do = async function(command, page = null) {
   await this.focus();
   await _waitForDOM(page, Xdotoolify.defaultCheckUntilTimeout); 
   if (command) {
-    if (page) {
+    if (page && page.executeScript) {
       await page.executeScript(() => console.log('clicking'));
     }
     //console.log('command is ' + command);
