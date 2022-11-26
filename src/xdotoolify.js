@@ -14,9 +14,21 @@ const _waitForDOM = async function(page, timeout) {
 
   return new Promise(async (resolve, reject) => {
     const i = setInterval(async () => {
-      const readyState = await page.executeScript(function() {
-        return document.readyState;
-      });
+      let readyState;
+
+      try {
+        readyState = await page.executeScript(function() {
+          return document.readyState;
+        });
+      } catch (e) {
+        // this error is thrown when a tab is closed
+        // so we ignore it
+        if (e.name === 'NoSuchWindowError') {
+          resolve();
+        } else {
+          throw e;
+        }
+      }
 
       if (readyState === 'complete') {
         clearInterval(i);
