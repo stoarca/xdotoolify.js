@@ -12,34 +12,31 @@ const _waitForDOM = async function(page, timeout) {
 
   if (!(page && page.executeScript)) { return; }
 
+  const getReadyState = async () => {
+    try {
+      const readyState = await page.executeScript(function() {
+        return document.readyState;
+      });
+      return readyState;
+    } catch (e) {
+      // this error is thrown when a tab is closed
+      // so we ignore it
+      if (e.name === 'NoSuchWindowError') {
+        return 'complete';
+      } else {
+        throw e;
+      }
+    }
+  };
+
   return new Promise(async (resolve, reject) => {
-    const i = setInterval(async () => {
-      let readyState;
-
-      try {
-        readyState = await page.executeScript(function() {
-          return document.readyState;
-        });
-      } catch (e) {
-        // this error is thrown when a tab is closed
-        // so we ignore it
-        if (e.name === 'NoSuchWindowError') {
-          resolve();
-        } else {
-          throw e;
-        }
+    while (Date.now() < expires) {
+      if (await getReadyState() === 'complete') {
+        return resolve();
       }
-
-      if (readyState === 'complete') {
-        clearInterval(i);
-        resolve();
-      } else if (Date.now() > expires) {
-        const url = await page.executeScript(function() {
-          return document.URL;
-        });
-        reject('Timed out while waiting for DOM to load.');
-      }
-    }, 100);
+      await _sleep(20);
+    }
+    reject('Timed out while waiting for the dom to load');
   });
 };
 
