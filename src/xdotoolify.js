@@ -64,12 +64,19 @@ const _waitForClickAction = async function(page, timeout) {
       reject(error);
       return;
     }
+
+    if (clickInfo.registered && !clickInfo.success) {
+      const error = new Error(clickInfo.wrongClickMessage)
+      reject(error);
+    }
+
     if (clickInfo.error) {
       const error = new Error(clickInfo.error);
       error.errorCode = 'click.wrongElement';
       reject(error);
       return;
     }
+
     resolve(null);
   });
 };
@@ -86,25 +93,31 @@ var _addClickHandler = async function(page, selector, eventType) {
       error: null
     };
 
-    document.addEventListener(_eventType, (event) => {
+    const listenerOptions = {once: true, capture: true};
+
+    if (!window.selectedEl) {
+      window.clickInfo.error = `Tried to click, but element not found by selector ${
+        _selector
+      }.`
+    } else {
+      const onClick = () => {
+        window.clickInfo.success = true;
+        window.selectedEl.removeEventListener(_eventType, onClick, listenerOptions)
+      }
+
+      window.selectedEl.addEventListener(_eventType, onClick, listenerOptions)
+    }
+
+    const documentClickHandler = (event) => {
       window.handlerActive = false;
       window.clickInfo.error = null;
 
       if (![0, 1, 2].includes(event.button)) { return; }
 
       window.clickInfo.registered = true;
+
       const {target} = event;
 
-      const _isDescendant = function (parent, child) {
-        let node = child.parentNode;
-        while (node) {
-          if (node === parent) {
-              return true;
-          }
-          node = node.parentNode;
-        }
-        return false;
-      };
 
       const _getAncestry = function (el) {
         let ancestry = [{
@@ -125,48 +138,39 @@ var _addClickHandler = async function(page, selector, eventType) {
         }
         return ancestry.reverse();
       };
-
-      if (target !== window.selectedEl && !_isDescendant(window.selectedEl, target)) {
-        const elementInDom = document.body.contains(window.selectedEl);
-        let errorMsg;
-        let ancestry;
-        try {
-          ancestry = _getAncestry(target);
-        } catch (e) {
-          console.error(e);
-        }
-
-        let genericMessage = (
-            'The clicked element has the following ancestor tree: \n'
-        );
-        ancestry.forEach(el => {
-          genericMessage += (
-            'tagName: "' + el.tagName + '" ' +
-            'id: "' + el.id + '" ' +
-            'data-test: "' + el.dataTest + '" ' +
-            'classes: "' + el.classes + '" >\n'
-          );
-        })
-        if (!elementInDom) {
-          errorMsg = (
-            'Selector ' + _selector + ' was not present in the document ' +
-              'at the moment of clicking. This could be caused by (1) the element ' +
-              'being removed from the DOM or (2) a change in the element\'s selector. ' +
-              'Please check and ensure the element is present and the selector used ' +
-              'leads to it at the moment of clicking. '
-          );
-        } else {
-          errorMsg = (
-            'Selector ' + _selector + ' does not match the clicked element. ' +
-              'This may be caused by (1) the element changing position (e.g ' +
-              'due to an animation) or (2) another element covering up the target ' +
-              'element. Please review screenshots and ensure that the cursor is at the ' +
-              'correct position. '
-          );
-        }
-        window.clickInfo.error = (errorMsg + genericMessage);
+      try {
+        ancestry = _getAncestry(target);
+      } catch (e) {
+        console.error(e);
       }
-    }, {once: true, capture: true});
+
+      let genericMessage = (
+          'The clicked element has the following ancestor tree: \n'
+      );
+
+      ancestry.forEach(el => {
+        genericMessage += (
+          'tagName: "' + el.tagName + '" ' +
+          'id: "' + el.id + '" ' +
+          'data-test: "' + el.dataTest + '" ' +
+          'classes: "' + el.classes + '" >\n'
+        );
+      })
+
+      errorMsg = (
+        'Selector ' + _selector + ' does not match the clicked element. ' +
+          'This may be caused by (1) the element changing position (e.g ' +
+          'due to an animation) or (2) another element covering up the target ' +
+          'element. Please review screenshots and ensure that the cursor is at the ' +
+          'correct position. '
+      );
+
+      window.clickInfo.wrongClickMessage = (errorMsg + genericMessage);
+
+      document.removeEventListener(_eventType, documentClickHandler, listenerOptions)
+    }
+
+    document.addEventListener(_eventType, documentClickHandler, listenerOptions);
     console.log('finished adding click handler')
     window.handlerActive = true;
   }, selector, eventType);
