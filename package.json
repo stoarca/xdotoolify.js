@@ -1,12 +1,20 @@
 {
   "name": "xdotoolify",
-  "version": "1.0.66",
+  "version": "2.0.0",
   "description": "xdotoolify simulates clicks and keystrokes in selenium in a way that is indistinguishable from a real user's actions",
   "main": "dist/xdotoolify.js",
+  "types": "dist/xdotoolify.d.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "build": "cp src/xdotoolify.js dist/",
-    "prepare": "npm run build",
-    "test": "jest --runInBand"
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc --project tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && jest --runInBand --verbose \"$@\""
   },
   "repository": {
     "type": "git",
@@ -15,12 +23,20 @@
   "author": "Sergiu Toarca",
   "license": "MIT",
   "devDependencies": {
-    "jest": "^27.5.1"
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.15.17",
+    "@types/selenium-webdriver": "^4.1.22",
+    "jest": "^29.7.0",
+    "selenium-webdriver": "4.32.0",
+    "ts-jest": "^29.3.3",
+    "typescript": "^5.8.3"
   },
   "jest": {
     "testMatch": [
-      "**/*[sS]pec.js"
-    ]
+      "**/*[sS]pec.[jt]s"
+    ],
+    "preset": "ts-jest",
+    "testEnvironment": "node"
   },
   "dependencies": {
     "fast-deep-equal": "^3.1.3"
