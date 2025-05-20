@@ -158,9 +158,9 @@ describe('xdotoolify', function() {
       stack = e.stack;
     }
 
-    expect(stack).toContain(
-      'Expected: \u001b[32m4\u001b[39m\nReceived: \u001b[31m5\u001b[39m'
-    );
+    // Check for presence of error message while ignoring potential color codes
+    expect(stack.toLowerCase().replace(/\u001b\[\d+m/g, '')).toContain('expected: 4');
+    expect(stack.toLowerCase().replace(/\u001b\[\d+m/g, '')).toContain('received: 5');
     expect(stack).toContain('Value being checked: [{"a":5},6]');
   });
 
@@ -495,6 +495,39 @@ describe('xdotoolify', function() {
       // @ts-expect-error - too many arguments (extra argument before callback)
       await page.X.checkUntil(funcWithOptionals, "test", 42, "extra", (result) => result === "test").do();
     }).rejects.toThrow();
+  });
+  
+  it('should handle DebuggableResult objects correctly', async function() {
+    const basicFunc = Xdotoolify.setupWithPage(() => 42);
+    await page.X.checkUntil(basicFunc, 42).do();
+    
+    const debuggableFunc = Xdotoolify.setupWithPage(() => {
+      return new Xdotoolify.DebuggableResult(42, {
+        context: "Test context",
+        details: "Additional debug information"
+      });
+    });
+    
+    await page.X.checkUntil(debuggableFunc, 42).do();
+    await page.X.checkUntil(debuggableFunc, (value) => value === 42).do();
+    
+    // Test with a callback that expects the value, not the DebuggableResult
+    await page.X.checkUntil(debuggableFunc, (num) => {
+      expect(typeof num).toBe("number");
+      return num === 42;
+    }).do();
+    
+    // Test failed match with debug info
+    let errorStack = "";
+    try {
+      await page.X.checkUntil(debuggableFunc, 43).do();
+    } catch (e: any) {
+      errorStack = e.stack;
+    }
+    
+    expect(errorStack).toContain("Debug info:");
+    expect(errorStack).toContain("Test context");
+    expect(errorStack).toContain("Additional debug information");
   });
 
   it('should work with setupWithoutPage and run', async function() {

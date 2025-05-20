@@ -15,7 +15,6 @@ trap cleanup INT TERM
 
 # Run tests with proper signal handling
 exec docker run --rm \
-  -it \
   -v "$(pwd):/app" \
   xdotoolify-tests \
   bash -c "Xvfb :50 -screen 0 1280x1024x24 2>/dev/null & sleep 2 && fluxbox 2>/dev/null & sleep 2 && npm run test -- $(printf '%q ' "$@")"

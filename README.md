@@ -1,5 +1,7 @@
 # xdotoolify.js
 
+[![CI](https://github.com/stoarca/xdotoolify.js/actions/workflows/ci.yml/badge.svg)](https://github.com/stoarca/xdotoolify.js/actions/workflows/ci.yml)
+
 xdotoolify.js is used to simulate clicks and keystrokes in Selenium
 
 Selenium tries to cater to many different browsers and operating systems,
