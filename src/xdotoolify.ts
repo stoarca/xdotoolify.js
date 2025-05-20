@@ -629,7 +629,7 @@ class _Xdotoolify {
   checkUntil<P extends any[], R>(
     f: XPageFunction<(page: any, ...args: P) => R> |
         XNoPageFunction<(...args: P) => R>,
-    ...rest: [...P, ((result: Await<R>) => any) | Await<R>]
+    ...rest: [...P, ((result: Await<R extends DebuggableResult<infer T> ? T : R>) => any) | Await<R extends DebuggableResult<infer T> ? T : R>]
   ): this {
     // .checkUntil(myFunc, x => expect(x).toBe(5))
     // .checkUntil(myFunc, x => x == 5)
@@ -1107,11 +1107,19 @@ class _Xdotoolify {
                 }
                 try {
                   if (typeof checkOp.callbackOrExpectedValue === 'function') {
-                    // Use proper typing to preserve parameter type information
-                    const typedCallback = checkOp.callbackOrExpectedValue as (value: typeof ret) => any;
-                    return [ret, typedCallback(ret)];
+                    if (ret instanceof DebuggableResult) {
+                      const typedCallback = checkOp.callbackOrExpectedValue as (value: typeof ret.value) => any;
+                      return [ret, typedCallback(ret.value)];
+                    } else {
+                      const typedCallback = checkOp.callbackOrExpectedValue as (value: typeof ret) => any;
+                      return [ret, typedCallback(ret)];
+                    }
                   } else {
-                    return [ret, ret === checkOp.callbackOrExpectedValue];
+                    if (ret instanceof DebuggableResult) {
+                      return [ret, ret.value === checkOp.callbackOrExpectedValue];
+                    } else {
+                      return [ret, ret === checkOp.callbackOrExpectedValue];
+                    }
                   }
                 } catch (e: any) {
                   if (ignoreCallbackError) {
@@ -1150,24 +1158,51 @@ class _Xdotoolify {
                 if (Date.now() > expires) {
                   let msg = 'The above error happened because ' +
                       'checkUntil timed out for ' + checkOp.func.name;
+                  
+                  const isDebuggable = result instanceof DebuggableResult;
+                  const actualValue = isDebuggable ? (result as DebuggableResult<any>).value : result;
+                  const debugInfo = isDebuggable ? (result as DebuggableResult<any>).debugInfo : null;
+                  
                   if (errorOrCheck instanceof Error) {
                     let retJSON;
                     try {
-                      retJSON = JSON.stringify(result);
+                      retJSON = JSON.stringify(isDebuggable ? actualValue : result);
                     } catch (e) {
                       retJSON = e;
                     }
+                    
                     errorOrCheck.stack += '\nValue being checked: ' + retJSON;
+                    
+                    if (isDebuggable && debugInfo) {
+                      try {
+                        const debugInfoStr = JSON.stringify(debugInfo);
+                        errorOrCheck.stack += '\nDebug info: ' + debugInfoStr;
+                      } catch (e) {
+                        errorOrCheck.stack += '\nDebug info: [Cannot stringify debug info]';
+                      }
+                    }
+                    
                     errorOrCheck.stack += '\n' + msg;
                     throw errorOrCheck;
                   } else {
                     try {
-                      throw new Error(
-                        'Expected ' + JSON.stringify(result) +
-                        ' to be ' + String(checkOp.callbackOrExpectedValue)
-                      );
+                      let errorMsg = 'Expected ' + JSON.stringify(isDebuggable ? actualValue : result) +
+                        ' to be ' + String(checkOp.callbackOrExpectedValue);
+                      
+                      const error = new Error(errorMsg);
+                      
+                      if (isDebuggable && debugInfo) {
+                        try {
+                          const debugInfoStr = JSON.stringify(debugInfo);
+                          error.stack += '\nDebug info: ' + debugInfoStr;
+                        } catch (e) {
+                          error.stack += '\nDebug info: [Cannot stringify debug info]';
+                        }
+                      }
+                      
+                      error.stack += '\n' + msg;
+                      throw error;
                     } catch (e: any) {
-                      e.stack += '\n' + msg;
                       throw e;
                     }
                   }
@@ -1430,11 +1465,22 @@ class _Xdotoolify {
   }
 }
 
+class DebuggableResult<T> {
+  value: T;
+  debugInfo: any;
+
+  constructor(value: T, debugInfo: any) {
+    this.value = value;
+    this.debugInfo = debugInfo;
+  }
+}
+
 interface XdotoolifyFunction {
   (page: WebDriver, xjsLastPos?: AbsolutePosition): XWebDriver;
   defaultCheckUntilTimeout: number;
   setupWithPage: <F extends PageFunction> (f: F) => XPageFunction<F>;
   setupWithoutPage: <F extends NoPageFunction> (f: F) => XNoPageFunction<F>;
+  DebuggableResult: typeof DebuggableResult;
 }
 
 const Xdotoolify = function(page: WebDriver, xjsLastPos?: AbsolutePosition): XWebDriver {
@@ -1461,5 +1507,7 @@ Xdotoolify.setupWithoutPage = function<F extends NoPageFunction>(
   (f as unknown as XNoPageFunction<F>)._xdotoolifyWithPage = false;
   return f as unknown as XNoPageFunction<F>;
 };
+
+Xdotoolify.DebuggableResult = DebuggableResult;
 
 export default Xdotoolify;
