@@ -3,12 +3,6 @@ import equal from 'fast-deep-equal';
 
 import { WebDriver } from 'selenium-webdriver';
 
-// Enhance WebDriver typings
-declare module 'selenium-webdriver' {
-  interface WebDriver {
-    executeScript<F extends (...args: any[]) => any>(script: string | F, ...args: Parameters<F>): Promise<ReturnType<F>>;
-  }
-}
 type Selector = string | [string, number];
 
 // Define specific position types
@@ -35,6 +29,7 @@ type Tail<T extends any[]> = T extends [any, ...infer U] ? U : never;
 export interface XWebDriver extends WebDriver {
   X: _Xdotoolify;
   xjsLastPos: AbsolutePosition;
+  executeScript<P extends any[], T>(fn: (...args: P) => T, ...args: P): Promise<T>;
 }
 
 // Base operation with common properties
@@ -50,37 +45,33 @@ interface SleepOperation extends BaseOperation {
   ms: number;
 }
 
-type PageFunction = (page: XWebDriver, ...args: any[]) => any;
-export interface XPageFunction<F extends PageFunction = PageFunction> {
-  (...args: Parameters<F>): ReturnType<F>;
+type PageFunction<P extends any[], R> = (page: XWebDriver, ...args: P) => R;
+export interface XPageFunction<P extends any[], R> {
+  (page: XWebDriver, ...args: P): R;
   _xdotoolifyWithPage: true;
 }
 
-type NoPageFunction = (...args: any[]) => any;
-export interface XNoPageFunction<F extends NoPageFunction = NoPageFunction> {
-  (...args: Parameters<F>): ReturnType<F>;
+type NoPageFunction<P extends any[], R> = (...args: P) => R;
+export interface XNoPageFunction<P extends any[], R> {
+  (...args: P): R;
   _xdotoolifyWithPage: false;
 }
 
-type XArgTypes<T> = T extends XPageFunction<any>
-  ? T extends (page: XWebDriver, ...args: infer P) => any ? P : never
-  : T extends (...args: infer P) => any ? P : never;
-
 // Check/run operations with proper function types
-interface RunOperation<F extends XPageFunction | XNoPageFunction = XPageFunction | XNoPageFunction> extends BaseOperation {
+interface RunOperation<P extends any[] = any[], R = any> extends BaseOperation {
   type: 'run';
-  func: F;
-  args: XArgTypes<F>;
+  func: XPageFunction<P, R> | XNoPageFunction<P, R>;
+  args: P;
 }
 
 // Helper type to unwrap Promise if it's a Promise
 type Await<T> = T extends Promise<infer U> ? U : T;
 
-interface CheckUntilOperation<F extends XPageFunction | XNoPageFunction = XPageFunction | XNoPageFunction> extends BaseOperation {
+interface CheckUntilOperation<P extends any[] = any[], R = any> extends BaseOperation {
   type: 'checkUntil';
-  func: F;
-  args: XArgTypes<F>;
-  callbackOrExpectedValue: ((result: Await<ReturnType<F>>) => any) | Await<ReturnType<F>>;
+  func: XPageFunction<P, R> | XNoPageFunction<P, R>;
+  args: P;
+  callbackOrExpectedValue: ((result: Await<R> extends DebuggableResult<infer T> ? T : Await<R>) => any) | any;
 }
 
 interface RequireCheckOperation extends BaseOperation {
@@ -127,8 +118,8 @@ interface TypeOperation extends BaseOperation {
 // Union of all operation types
 type Operation = 
   | SleepOperation
-  | RunOperation
-  | CheckUntilOperation
+  | RunOperation<any[], any>
+  | CheckUntilOperation<any[], any>
   | RequireCheckOperation
   | MouseMoveOperation
   | ClickOperation
@@ -183,7 +174,7 @@ const _sleep = function(time: number): Promise<void> {
   });
 };
 
-const _waitForDOM = async function(page: WebDriver, timeout: number): Promise<void> {
+const _waitForDOM = async function(page: XWebDriver, timeout: number): Promise<void> {
   let expires = Date.now() + timeout;
 
   if (!(page && page.executeScript)) { return; }
@@ -216,7 +207,7 @@ const _waitForDOM = async function(page: WebDriver, timeout: number): Promise<vo
   });
 };
 
-const _waitForClickAction = async function(page: WebDriver, timeout: number): Promise<null> {
+const _waitForClickAction = async function(page: XWebDriver, timeout: number): Promise<null> {
   let expires = Date.now() + timeout;
 
   return new Promise<null>(async (resolve, reject) => {
@@ -263,7 +254,7 @@ interface ElementInfo {
   dataTest: string | null;
 }
 
-const _addClickHandler = async function(page: WebDriver, selector: Selector, eventType: string): Promise<void> {
+const _addClickHandler = async function(page: XWebDriver, selector: Selector, eventType: string): Promise<void> {
   await page.executeScript(function(_selector: Selector, _eventType: string) {
     console.log('starting to add click handler');
     window.selectedEl = Array.isArray(_selector) ? (
@@ -367,7 +358,7 @@ interface Rect {
   height: number;
 }
 
-const _getElementAndBrowserRect = async function(page: WebDriver, selector: Selector): Promise<ElementAndBrowserRect> {
+const _getElementAndBrowserRect = async function(page: XWebDriver, selector: Selector): Promise<ElementAndBrowserRect> {
   return await page.executeScript(function(_selector: Selector) {
     const intersectRects = function(a: Rect, b: Rect): Rect | null {
       if (a.x > b.x + b.width ||
@@ -480,7 +471,7 @@ const _getElementAndBrowserRect = async function(page: WebDriver, selector: Sele
   }, selector);
 };
 
-const _getElementAndBrowserScreenRect = async function(page: WebDriver, selector: Selector): Promise<ElementAndBrowserRect> {
+const _getElementAndBrowserScreenRect = async function(page: XWebDriver, selector: Selector): Promise<ElementAndBrowserRect> {
   let ret = await _getElementAndBrowserRect(page, selector);
   return page.executeScript(function(_ret: ElementAndBrowserRect) {
     _ret.rect.x += window.mozInnerScreenX;
@@ -489,7 +480,7 @@ const _getElementAndBrowserScreenRect = async function(page: WebDriver, selector
   }, ret);
 };
 
-const waitUntilElementIsAvailable = async function(page: WebDriver, selector: Selector, timeout: number): Promise<boolean> {
+const waitUntilElementIsAvailable = async function(page: XWebDriver, selector: Selector, timeout: number): Promise<boolean> {
   const startTime = Date.now();
   let curTime = Date.now();
   let element: any = null;
@@ -615,8 +606,7 @@ class _Xdotoolify {
     return this;
   }
   run<P extends any[], R>(
-    f: XPageFunction<(page: any, ...args: P) => R> |
-        XNoPageFunction<(...args: P) => R>,
+    f: XPageFunction<P, R> | XNoPageFunction<P, R>,
     ...rest: [...P]
   ): this {
     this._addOperation({
@@ -627,9 +617,8 @@ class _Xdotoolify {
     return this;
   }
   checkUntil<P extends any[], R>(
-    f: XPageFunction<(page: any, ...args: P) => R> |
-        XNoPageFunction<(...args: P) => R>,
-    ...rest: [...P, ((result: Await<R extends DebuggableResult<infer T> ? T : R>) => any) | Await<R extends DebuggableResult<infer T> ? T : R>]
+    f: XPageFunction<P, R> | XNoPageFunction<P, R>,
+    ...rest: [...P, ((result: Await<R> extends DebuggableResult<infer T> ? T : Await<R>) => any) | (Await<R> extends DebuggableResult<infer T> ? T : Await<R>)]
   ): this {
     // .checkUntil(myFunc, x => expect(x).toBe(5))
     // .checkUntil(myFunc, x => x == 5)
@@ -1037,7 +1026,7 @@ class _Xdotoolify {
 
 
           if (op.type === 'sleep') {
-            await this._do(commandArr.join(' '), this.page);
+            await this._do(commandArr.join(' '));
             commandArr = [];
             await _sleep(op.ms!);
           } else if (op.type === 'addCheckRequirement') {
@@ -1045,8 +1034,8 @@ class _Xdotoolify {
           } else if (op.type === 'run' || op.type === 'checkUntil') {
             // Narrow the type to RunOperation or CheckOperation, preserving the generic type parameters
             const runOrCheckOp = op.type === 'run' 
-              ? op as RunOperation<XPageFunction | XNoPageFunction>
-              : op as CheckUntilOperation<XPageFunction | XNoPageFunction>;
+              ? op as RunOperation<any[], any>
+              : op as CheckUntilOperation<any[], any>;
             
             if (
               op.type === 'checkUntil' &&
@@ -1054,7 +1043,7 @@ class _Xdotoolify {
             ) {
               this.requireCheckImmediatelyAfter = false;
             }
-            await this._do(commandArr.join(' '), this.page);
+            await this._do(commandArr.join(' '));
             commandArr = [];
             
             // This is a JavaScript-only code path, never hit in TypeScript
@@ -1106,20 +1095,12 @@ class _Xdotoolify {
                   );
                 }
                 try {
+                  const value = ret instanceof DebuggableResult ? ret.value : ret;
+                  
                   if (typeof checkOp.callbackOrExpectedValue === 'function') {
-                    if (ret instanceof DebuggableResult) {
-                      const typedCallback = checkOp.callbackOrExpectedValue as (value: typeof ret.value) => any;
-                      return [ret, typedCallback(ret.value)];
-                    } else {
-                      const typedCallback = checkOp.callbackOrExpectedValue as (value: typeof ret) => any;
-                      return [ret, typedCallback(ret)];
-                    }
+                    return [ret, checkOp.callbackOrExpectedValue(value)];
                   } else {
-                    if (ret instanceof DebuggableResult) {
-                      return [ret, ret.value === checkOp.callbackOrExpectedValue];
-                    } else {
-                      return [ret, ret === checkOp.callbackOrExpectedValue];
-                    }
+                    return [ret, value === checkOp.callbackOrExpectedValue];
                   }
                 } catch (e: any) {
                   if (ignoreCallbackError) {
@@ -1133,7 +1114,7 @@ class _Xdotoolify {
                       retJSON = e;
                     }
 
-                    e.stack += '\nValue being checked: ' + retJSON;
+                    e.message += '\nValue being checked: ' + retJSON;
                     throw e;
                   }
                 }
@@ -1171,14 +1152,14 @@ class _Xdotoolify {
                       retJSON = e;
                     }
                     
-                    errorOrCheck.stack += '\nValue being checked: ' + retJSON;
+                    errorOrCheck.message += '\nValue being checked: ' + retJSON;
                     
                     if (isDebuggable && debugInfo) {
                       try {
                         const debugInfoStr = JSON.stringify(debugInfo);
-                        errorOrCheck.stack += '\nDebug info: ' + debugInfoStr;
+                        errorOrCheck.message += '\nDebug info: ' + debugInfoStr;
                       } catch (e) {
-                        errorOrCheck.stack += '\nDebug info: [Cannot stringify debug info]';
+                        errorOrCheck.message += '\nDebug info: [Cannot stringify debug info]';
                       }
                     }
                     
@@ -1194,9 +1175,9 @@ class _Xdotoolify {
                       if (isDebuggable && debugInfo) {
                         try {
                           const debugInfoStr = JSON.stringify(debugInfo);
-                          error.stack += '\nDebug info: ' + debugInfoStr;
+                          error.message += '\nDebug info: ' + debugInfoStr;
                         } catch (e) {
-                          error.stack += '\nDebug info: [Cannot stringify debug info]';
+                          error.message += '\nDebug info: [Cannot stringify debug info]';
                         }
                       }
                       
@@ -1237,12 +1218,12 @@ class _Xdotoolify {
               pos.x > 0 ?  pos.x - 1 : pos.x + 1
             } ${pos.y}`);
             commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
-            await this._do(commandArr.join(' '), this.page);
+            await this._do(commandArr.join(' '));
             await _sleep(50);
             commandArr = [];
           }
           if (op.type === 'mousemove') {
-            await this._do(commandArr.join(' '), this.page);
+            await this._do(commandArr.join(' '));
             commandArr = [];
 
             var pos = op.selector as AbsolutePosition;
@@ -1315,12 +1296,12 @@ class _Xdotoolify {
                 y: (this.page.xjsLastPos.y + pos.y) / 2,
               };
               commandArr.push(`mousemove --sync ${midPoint.x} ${midPoint.y}`);
-              await this._do(commandArr.join(' '), this.page);
+              await this._do(commandArr.join(' '));
               await _sleep(50);
               commandArr = [];
             }
             commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
-            await this._do(commandArr.join(' '), this.page);
+            await this._do(commandArr.join(' '));
             await _sleep(50);
             commandArr = [];
             this.page.xjsLastPos.x = pos.x;
@@ -1332,7 +1313,7 @@ class _Xdotoolify {
               (Array.isArray((op as ClickOperation).selector) || typeof (op as ClickOperation).selector === 'string')
             ) {
               // clean up previous commands
-              await this._do(commandArr.join(' '), this.page);
+              await this._do(commandArr.join(' '));
               await _sleep(50);
               commandArr = [];
 
@@ -1344,7 +1325,7 @@ class _Xdotoolify {
                 throw new Error(e.toString());
               }
               commandArr.push(`click ${(op as ClickOperation).mouseButton}`);
-              await this._do(commandArr.join(' '), this.page);
+              await this._do(commandArr.join(' '));
               try {
                 // TO DO: It seems that Firefox sometimes swallows clicks
                 // when passing from one textarea to another. This needs
@@ -1374,7 +1355,7 @@ class _Xdotoolify {
               (Array.isArray((op as any).selector) || typeof (op as any).selector === 'string')
             ) {
               // clean up previous commands
-              await this._do(commandArr.join(' '), this.page);
+              await this._do(commandArr.join(' '));
               await _sleep(50);
               commandArr = [];
 
@@ -1384,7 +1365,7 @@ class _Xdotoolify {
                 throw new Error(e.toString());
               }
               commandArr.push(`mousedown ${(op as MouseButtonOperation).mouseButton}`);
-              await this._do(commandArr.join(' '), this.page);
+              await this._do(commandArr.join(' '));
               try {
                 await _waitForClickAction(this.page, (Xdotoolify as any).defaultCheckUntilTimeout);
               } catch (e: any) {
@@ -1408,7 +1389,7 @@ class _Xdotoolify {
             commandArr.push(`key ${(op as KeyOperation).key}`);
           } else if (op.type === 'type') {
             commandArr.push(`type ${JSON.stringify((op as TypeOperation).text)}`);
-            await this._do(commandArr.join(' '), this.page);
+            await this._do(commandArr.join(' '));
             commandArr = [];
           }
         } catch (e: any) {
@@ -1423,7 +1404,7 @@ class _Xdotoolify {
         }
       }
       if (commandArr.length) {
-        await this._do(commandArr.join(' '), this.page);
+        await this._do(commandArr.join(' '));
       }
       this.level -= 1;
       if (this.level === 0 && this.requireCheckImmediatelyAfter) {
@@ -1452,13 +1433,11 @@ class _Xdotoolify {
     }
   }
 
-  async _do(command: string, page: WebDriver): Promise<void> {
+  async _do(command: string): Promise<void> {
     await this.focus();
-    await _waitForDOM(page, (Xdotoolify as any).defaultCheckUntilTimeout); 
+    await _waitForDOM(this.page, (Xdotoolify as any).defaultCheckUntilTimeout); 
     if (command) {
-      if (page && page.executeScript) {
-        await page.executeScript(() => console.log('clicking'));
-      }
+      await this.page.executeScript(() => console.log('clicking'));
       //console.log('command is ' + command);
       childProcess.execSync('xdotool ' + command);
     }
@@ -1478,8 +1457,8 @@ class DebuggableResult<T> {
 interface XdotoolifyFunction {
   (page: WebDriver, xjsLastPos?: AbsolutePosition): XWebDriver;
   defaultCheckUntilTimeout: number;
-  setupWithPage: <F extends PageFunction> (f: F) => XPageFunction<F>;
-  setupWithoutPage: <F extends NoPageFunction> (f: F) => XNoPageFunction<F>;
+  setupWithPage: <P extends any[], R> (f: PageFunction<P, R>) => XPageFunction<P, R>;
+  setupWithoutPage: <P extends any[], R> (f: NoPageFunction<P, R>) => XNoPageFunction<P, R>;
   DebuggableResult: typeof DebuggableResult;
 }
 
@@ -1493,21 +1472,23 @@ const Xdotoolify = function(page: WebDriver, xjsLastPos?: AbsolutePosition): XWe
 Xdotoolify.defaultCheckUntilTimeout = 3000;
 
 // setupWithPage expects a function taking a WebDriver as first param and returns a XPageFunction
-Xdotoolify.setupWithPage = function<F extends PageFunction>(
-  f: F
-): XPageFunction<F> {
-  (f as unknown as XPageFunction<F>)._xdotoolifyWithPage = true;
-  return f as unknown as XPageFunction<F>;
+Xdotoolify.setupWithPage = function<P extends any[], R>(
+  f: PageFunction<P, R>
+): XPageFunction<P, R> {
+  (f as XPageFunction<P, R>)._xdotoolifyWithPage = true;
+  return f as XPageFunction<P, R>;
 };
 
 // setupWithoutPage expects any function and returns a XNoPageFunction
-Xdotoolify.setupWithoutPage = function<F extends NoPageFunction>(
-  f: F
-): XNoPageFunction<F> {
-  (f as unknown as XNoPageFunction<F>)._xdotoolifyWithPage = false;
-  return f as unknown as XNoPageFunction<F>;
+Xdotoolify.setupWithoutPage = function<P extends any[], R>(
+  f: NoPageFunction<P, R>
+): XNoPageFunction<P, R> {
+  (f as XNoPageFunction<P, R>)._xdotoolifyWithPage = false;
+  return f as XNoPageFunction<P, R>;
 };
 
 Xdotoolify.DebuggableResult = DebuggableResult;
+
+
 
 export default Xdotoolify;

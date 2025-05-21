@@ -1,4 +1,5 @@
 import Xdotoolify, { XWebDriver, XPageFunction } from '../src/xdotoolify';
+import * as C from '../src/common';
 import { Builder, WebDriver } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox';
 
@@ -64,7 +65,7 @@ describe('xdotoolify', function() {
   it('should throw error if not setup', async function() {
     let errorMsg = 'No error thrown';
     // Intentionally create a function that looks like XPageFunction but missing the _xdotoolifyWithPage property
-    const badFunc = (() => {}) as unknown as XPageFunction;
+    const badFunc = (() => {}) as unknown as XPageFunction<any[], any>;
 
     try {
       await page.X.checkUntil(badFunc, noop).do();
@@ -623,5 +624,279 @@ describe('xdotoolify', function() {
     await page.X.checkUntil(multiOptional, "test", "test").do();
     await page.X.checkUntil(multiOptional, "test", true, `test:true`).do();
     await page.X.checkUntil(multiOptional, "test", false, 42, `test:false:42`).do();
+  });
+  
+  it('should preserve return types with executeScript', async function() {
+    // Type tests to verify that executeScript preserves the return type of the function
+    
+    // Number return type
+    const numberFn = () => 42;
+    const numberResult = await page.executeScript(numberFn);
+    const _numberCheck: number = numberResult; // Should not cause a type error
+    
+    // String return type
+    const stringFn = () => "hello";
+    const stringResult = await page.executeScript(stringFn);
+    const _stringCheck: string = stringResult; // Should not cause a type error
+    
+    // Object return type
+    const objFn = () => ({ foo: "bar", count: 123 });
+    const objResult = await page.executeScript(objFn);
+    const _objCheck: { foo: string, count: number } = objResult; // Should not cause a type error
+    
+    // Array return type
+    const arrayFn = () => [1, 2, 3];
+    const arrayResult = await page.executeScript(arrayFn);
+    const _arrayCheck: number[] = arrayResult; // Should not cause a type error
+    
+    // Function with arguments
+    const argsFunc = (x: number, y: string) => `${x}-${y}`;
+    const argsResult = await page.executeScript(argsFunc, 100, "test");
+    const _argsCheck: string = argsResult; // Should not cause a type error
+    
+    // This test passes if it compiles without type errors
+    expect(true).toBe(true);
+  });
+  
+  it('should work with evaluate() and preserve types', async function() {
+    await page.X.run(C.evaluate, () => 42).do();
+    
+    const numberResult = await C.evaluate(page, () => 42);
+    const _numberCheck: number = numberResult;
+    expect(numberResult).toBe(42);
+    
+    const stringResult = await C.evaluate(page, () => "hello world");
+    const _stringCheck: string = stringResult;
+    expect(stringResult).toBe("hello world");
+    
+    const objectResult = await C.evaluate(
+      page, 
+      () => ({ name: "test", count: 123, active: true })
+    );
+    const _objectCheck: { name: string, count: number, active: boolean } = objectResult;
+    expect(objectResult).toEqual({ name: "test", count: 123, active: true });
+    
+    const argsResult = await C.evaluate(
+      page,
+      (x: number, y: string, z: boolean) => ({ x, y, z }),
+      100,
+      "test", 
+      true
+    );
+    const _argsCheck: { x: number, y: string, z: boolean } = argsResult;
+    expect(argsResult).toEqual({ x: 100, y: "test", z: true });
+    
+    const domResult = await C.evaluate(
+      page,
+      () => document.title
+    );
+    const _domCheck: string = domResult;
+    
+    const asyncResult = await C.evaluate(
+      page,
+      async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return "async result";
+      }
+    );
+    const _asyncCheck: string = asyncResult;
+    expect(asyncResult).toBe("async result");
+    
+    try {
+      await C.evaluate(
+        page,
+        () => { throw new Error("Test error"); }
+      );
+      fail("Should have thrown an error");
+    } catch (e: any) {
+      expect(e.message).toContain("Test error");
+      expect(e.stack).toContain("The above error occurred in the evaluate() func with args");
+    }
+  });
+  
+  it('should have correct type checking for evaluate()', async function() {
+    const basicFunc = async () => {
+      // @ts-expect-error - Missing page argument
+      await C.evaluate(() => {});
+      
+      // @ts-expect-error - Missing function argument
+      await C.evaluate(page);
+    };
+    
+    const noArgsFunc = async () => {
+      const result = await C.evaluate(page, () => 'success');
+      const _typeCheck: string = result;
+    };
+    
+    const requiredArgsFunc = async () => {
+      // @ts-expect-error - Missing required argument to inner function
+      await C.evaluate(page, (requiredArg: string) => requiredArg.length);
+      
+      const result = await C.evaluate(
+        page, 
+        (requiredArg: string) => requiredArg.length, 
+        'test'
+      );
+      const _typeCheck: number = result;
+    };
+    
+    const optionalArgsFunc = async () => {
+      await C.evaluate(
+        page,
+        (required: string, optional?: number) => optional ? required + optional : required,
+        'test'
+      );
+      
+      const withOptional = await C.evaluate(
+        page,
+        (required: string, optional?: number) => optional ? required + optional : required,
+        'test',
+        42
+      );
+      
+      await C.evaluate(
+        page,
+        (...args: number[]) => args.reduce((sum, n) => sum + n, 0),
+        1, 2, 3, 4, 5
+      );
+    };
+    
+    const asyncReturnFunc = async () => {
+      const result = await C.evaluate(
+        page,
+        async () => 'async result'
+      );
+      const _typeCheck: string = result;
+      
+      const complexResult = await C.evaluate(
+        page,
+        async () => ({ data: [1, 2, 3], status: 'success' })
+      );
+      const _complexCheck: { data: number[], status: string } = complexResult;
+    };
+    
+    const domTypesFunc = async () => {
+      const elementResult = await C.evaluate(
+        page,
+        () => document.querySelector('body')
+      );
+      
+      const attributeResult = await C.evaluate(
+        page,
+        () => document.querySelector('a')?.getAttribute('href')
+      );
+      const _attributeCheck: string | null | undefined = attributeResult;
+    };
+    
+    expect(true).toBe(true);
+  });
+  
+  it('should get element count correctly', async function() {
+    await C.evaluate(page, () => {
+      document.body.innerHTML = `
+        <div class="test-div">Div 1</div>
+        <div class="test-div">Div 2</div>
+        <div class="test-div">Div 3</div>
+      `;
+    });
+    
+    const count = await C.elementCount(page, ".test-div");
+    expect(count).toBe(3);
+    
+    const nonExistentCount = await C.elementCount(page, ".non-existent");
+    expect(nonExistentCount).toBe(0);
+  });
+  
+  it('should get element text correctly', async function() {
+    await C.evaluate(page, () => {
+      document.body.innerHTML = `
+        <div id="text-element">This is a test text</div>
+        <div id="empty-element"></div>
+      `;
+    });
+    
+    const text = await C.elementText(page, "#text-element");
+    expect(text).toBe("This is a test text");
+    
+    const emptyText = await C.elementText(page, "#empty-element");
+    expect(emptyText).toBe("");
+    
+    const nonExistentText = await C.elementText(page, "#non-existent");
+    expect(nonExistentText).toBe(null);
+  });
+  
+  it('should get input value correctly', async function() {
+    await C.evaluate(page, () => {
+      document.body.innerHTML = `
+        <input id="test-input" value="test value">
+        <input id="empty-input" value="">
+      `;
+    });
+    
+    const value = await C.getInputValue(page, "#test-input");
+    expect(value).toBe("test value");
+    
+    const emptyValue = await C.getInputValue(page, "#empty-input");
+    expect(emptyValue).toBe("");
+    
+    const nonExistentValue = await C.getInputValue(page, "#non-existent");
+    expect(nonExistentValue).toBe(false);
+  });
+  
+  it('should count visible elements correctly', async function() {
+    await C.evaluate(page, () => {
+      document.body.innerHTML = `
+        <div class="test-visible">Visible Element 1</div>
+        <div class="test-visible">Visible Element 2</div>
+        <div class="test-visible" style="display: none;">Hidden Element</div>
+        <div class="test-visible" style="visibility: hidden;">Invisible Element</div>
+        <div class="test-visible" style="opacity: 0;">Zero Opacity Element</div>
+      `;
+    });
+    
+    const result = await C.visibleElementCount(page, ".test-visible");
+    expect(result.value).toBe(2);
+    expect(result.debugInfo.totalElements).toBe(5);
+    
+    // Test with custom options
+    const resultWithOptions = await C.visibleElementCount(page, ".test-visible", {
+      allowZeroOpacity: true
+    });
+    expect(resultWithOptions.value).toBe(3);
+    
+    // Test with non-existent elements
+    const nonExistentResult = await C.visibleElementCount(page, ".non-existent");
+    expect(nonExistentResult.value).toBe(0);
+    expect(nonExistentResult.debugInfo.totalElements).toBe(0);
+  });
+  
+  it('should work with checkUntil and visibleElementCount using value check', async function() {
+    await C.evaluate(page, () => {
+      document.body.innerHTML = `
+        <div class="test-visible">Visible Element 1</div>
+        <div class="test-visible">Visible Element 2</div>
+        <div class="test-visible" style="display: none;">Hidden Element</div>
+      `;
+    });
+    
+    await page.X.checkUntil(C.visibleElementCount, ".test-visible", 2).do();
+  });
+  
+  it('should work with checkUntil and visibleElementCount using callback', async function() {
+    await C.evaluate(page, () => {
+      document.body.innerHTML = `
+        <div class="test-visible">Visible Element 1</div>
+        <div class="test-visible">Visible Element 2</div>
+        <div class="test-visible" style="opacity: 0;">Zero Opacity Element</div>
+      `;
+    });
+    
+    await page.X.checkUntil(C.visibleElementCount, ".test-visible", (result) => {
+      // explicit typecheck
+      let asdf: number = result;
+      expect(result).toBe(2);
+      expect(typeof result).toBe("number"); // Verify it's unwrapped from DebuggableResult
+      return true;
+    }).do();
   });
 });
