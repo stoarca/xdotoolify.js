@@ -298,7 +298,7 @@ export const isElementActive = Xdotoolify.setupWithPage(function(page, selector:
 });
 
 export const isAllContentSelected = Xdotoolify.setupWithPage(function(page, selector: Selector) {
-  return evaluate(page, function(_selector: Selector) {
+  return evaluate(page, (_selector: Selector) => {
     let el: Element | null;
     if (Array.isArray(_selector)) {
       const elements = document.querySelectorAll(_selector[0]);
@@ -306,16 +306,26 @@ export const isAllContentSelected = Xdotoolify.setupWithPage(function(page, sele
     } else {
       el = document.querySelector(_selector);
     }
-    if (!el) return false;
     
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-      return el.selectionStart === 0 && el.selectionEnd === el.value.length && el.value.length > 0;
+    if (!el) {
+      return false;
     }
     
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return false;
-    
-    return selection.toString().length > 0;
+    // https://stackoverflow.com/questions/20419515/window-getselection-of-textarea-not-working-in-firefox
+    // https://bugzilla.mozilla.org/show_bug.cgi?id=85686
+    if (el.tagName === 'INPUT') {
+      const inputEl = el as HTMLInputElement;
+      // input type number does not have seletion attributes
+      if (inputEl.type === 'number') {
+        return true;
+      }
+      // Firefox getSelection returns an empty string for inputs
+      const selectionLenth = (inputEl.selectionEnd || 0) - (inputEl.selectionStart || 0);
+      return selectionLenth === inputEl.value.length;
+    }
+
+    const selectionText = document.getSelection()?.toString() || '';
+    return (el as HTMLElement).innerText === selectionText;
   }, selector);
 });
 

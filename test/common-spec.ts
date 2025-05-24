@@ -468,5 +468,48 @@ describe('common utility functions', function() {
         expect(value).toBe(`pos-${relpos}`);
       }
     });
+
+    it('should autoType with overwrite on empty input field', async function() {
+      await XC.evaluate(page, () => {
+        document.body.innerHTML += `<input id="empty-input-field" value="">`;
+      });
+
+      await page.X
+        .run(XC.autoType, '#empty-input-field', 'New content', { overwrite: true })
+        .checkUntil(XC.getInputValue, '#empty-input-field', 'New content')
+        .do();
+
+      const value = await XC.getInputValue(page, '#empty-input-field');
+      expect(value).toBe('New content');
+    });
+
+    it('should autoType with overwrite on empty textarea field', async function() {
+      await XC.evaluate(page, () => {
+        document.body.innerHTML += `<textarea id="empty-textarea-field"></textarea>`;
+      });
+
+      await page.X
+        .run(XC.autoType, '#empty-textarea-field', 'New textarea content', { overwrite: true })
+        .checkUntil(XC.getInputValue, '#empty-textarea-field', 'New textarea content')
+        .do();
+
+      const value = await XC.getInputValue(page, '#empty-textarea-field');
+      expect(value).toBe('New textarea content');
+    });
+
+    it('should autoType with overwrite on empty input field with focus already set', async function() {
+      await XC.evaluate(page, () => {
+        document.body.innerHTML += `<input id="focused-empty-input" value="">`;
+        (document.getElementById('focused-empty-input') as HTMLInputElement).focus();
+      });
+
+      await page.X
+        .run(XC.autoType, '#focused-empty-input', 'Focused content', { overwrite: true })
+        .checkUntil(XC.getInputValue, '#focused-empty-input', 'Focused content')
+        .do();
+
+      const value = await XC.getInputValue(page, '#focused-empty-input');
+      expect(value).toBe('Focused content');
+    });
   });
 });
