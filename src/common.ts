@@ -310,6 +310,10 @@ export const isAllContentSelected = Xdotoolify.setupWithPage(function(page, sele
     if (!el) {
       return false;
     }
+
+    if (el !== document.activeElement) {
+      throw new Error('selector does not specify activeElement');
+    }
     
     // https://stackoverflow.com/questions/20419515/window-getselection-of-textarea-not-working-in-firefox
     // https://bugzilla.mozilla.org/show_bug.cgi?id=85686
@@ -320,8 +324,8 @@ export const isAllContentSelected = Xdotoolify.setupWithPage(function(page, sele
         return true;
       }
       // Firefox getSelection returns an empty string for inputs
-      const selectionLenth = (inputEl.selectionEnd || 0) - (inputEl.selectionStart || 0);
-      return selectionLenth === inputEl.value.length;
+      const selectionLength = (inputEl.selectionEnd || 0) - (inputEl.selectionStart || 0);
+      return selectionLength === inputEl.value.length;
     }
 
     const selectionText = document.getSelection()?.toString() || '';

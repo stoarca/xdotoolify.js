@@ -94,8 +94,9 @@ describe('common utility functions', function() {
       const isSelected = await XC.isAllContentSelected(page, "#test-input");
       expect(isSelected).toBe(true);
 
-      const isNotSelected = await XC.isAllContentSelected(page, "#empty-input");
-      expect(isNotSelected).toBe(false);
+      await expect(async () => {
+        await XC.isAllContentSelected(page, "#empty-input");
+      }).rejects.toThrow('selector does not specify activeElement');
     });
 
     it('should work with array selectors', async function() {
