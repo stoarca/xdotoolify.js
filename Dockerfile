@@ -7,6 +7,7 @@ RUN apt-get update && \
     apt-get install -y \
     xdotool \
     fluxbox \
+    x11vnc \
     xvfb \
     psmisc \
     curl && \

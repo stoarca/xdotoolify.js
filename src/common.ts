@@ -1,4 +1,10 @@
-import Xdotoolify, { XWebDriver } from './xdotoolify';
+import Xdotoolify, { XWebDriver, Selector } from './xdotoolify';
+
+export interface AutoTypeOptions {
+  relpos?: string;
+  timeout?: number;
+  overwrite?: boolean;
+}
 
 export const evaluate = Xdotoolify.setupWithPage(async function<P extends any[], R>(
   page: XWebDriver,
@@ -17,9 +23,13 @@ export const evaluate = Xdotoolify.setupWithPage(async function<P extends any[],
   }
 }) as (<P extends any[], R>(page: XWebDriver, func: (...args: P) => R, ...args: P) => Promise<R>) & { _xdotoolifyWithPage: true };
 
-export const elementCount = Xdotoolify.setupWithPage(function(page, selector: string) {
-  return evaluate(page, function(_selector) {
-    return document.querySelectorAll(_selector).length;
+export const elementCount = Xdotoolify.setupWithPage(function(page, selector: Selector) {
+  return evaluate(page, function(_selector: Selector) {
+    if (Array.isArray(_selector)) {
+      return document.querySelectorAll(_selector[0]).length;
+    } else {
+      return document.querySelectorAll(_selector).length;
+    }
   }, selector);
 });
 
@@ -246,19 +256,162 @@ export const visibleElementCount = Xdotoolify.setupWithPage(async (page, selecto
   });
 });
 
-export const getInputValue = Xdotoolify.setupWithPage(async (page, selector: string) => {
-  const value = await evaluate(page, (_selector: string) => {
-    const input = document.querySelector<HTMLInputElement>(_selector);
+export const getInputValue = Xdotoolify.setupWithPage(async (page, selector: Selector) => {
+  const value = await evaluate(page, (_selector: Selector) => {
+    let input: HTMLInputElement | null;
+    if (Array.isArray(_selector)) {
+      const elements = document.querySelectorAll<HTMLInputElement>(_selector[0]);
+      input = elements[_selector[1]] || null;
+    } else {
+      input = document.querySelector<HTMLInputElement>(_selector);
+    }
     if (!input) return false;
     return input.value;
   }, selector);
   return value;
 });
 
-export const elementText = Xdotoolify.setupWithPage(function(page, selector: string) {
-  return evaluate(page, function(_selector: string) {
-    const elem = document.querySelector<HTMLElement>(_selector);
+export const elementText = Xdotoolify.setupWithPage(function(page, selector: Selector) {
+  return evaluate(page, function(_selector: Selector) {
+    let elem: HTMLElement | null;
+    if (Array.isArray(_selector)) {
+      const elements = document.querySelectorAll<HTMLElement>(_selector[0]);
+      elem = elements[_selector[1]] || null;
+    } else {
+      elem = document.querySelector<HTMLElement>(_selector);
+    }
     return elem ? elem.innerText : null;
   }, selector);
+});
+
+export const isElementActive = Xdotoolify.setupWithPage(function(page, selector: Selector) {
+  return evaluate(page, function(_selector: Selector) {
+    let el: Element | null;
+    if (Array.isArray(_selector)) {
+      const elements = document.querySelectorAll(_selector[0]);
+      el = elements[_selector[1]] || null;
+    } else {
+      el = document.querySelector(_selector);
+    }
+    return el && el === document.activeElement;
+  }, selector);
+});
+
+export const isAllContentSelected = Xdotoolify.setupWithPage(function(page, selector: Selector) {
+  return evaluate(page, function(_selector: Selector) {
+    let el: Element | null;
+    if (Array.isArray(_selector)) {
+      const elements = document.querySelectorAll(_selector[0]);
+      el = elements[_selector[1]] || null;
+    } else {
+      el = document.querySelector(_selector);
+    }
+    if (!el) return false;
+    
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+      return el.selectionStart === 0 && el.selectionEnd === el.value.length && el.value.length > 0;
+    }
+    
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return false;
+    
+    return selection.toString().length > 0;
+  }, selector);
+});
+
+export const autoClick = Xdotoolify.setupWithPage(function(
+  page: XWebDriver,
+  selector: Selector,
+  options: { mouseButton?: string; timeout?: number } = {}
+) {
+  return page.X
+    ._mousemove(
+      selector,
+      undefined,
+      { timeout: options.timeout }
+    )
+    ._click(options.mouseButton, false, selector)
+    .addRequireCheckImmediatelyAfter()
+    .do();
+});
+
+export const autoDrag = Xdotoolify.setupWithPage(function(
+  page: XWebDriver,
+  sel1: Selector,
+  sel2: Selector,
+  options: { mouseButton?: string; timeout?: number } = {}
+) {
+  return page.X
+    ._mousemove(
+      sel1,
+      'center',
+      { timeout: options.timeout }
+    )
+    ._drag(sel2, options.mouseButton, options.timeout, false)
+    .addRequireCheckImmediatelyAfter()
+    .do();
+});
+
+export const autoKey = Xdotoolify.setupWithPage(function(
+  page: XWebDriver,
+  selector: Selector,
+  key: string,
+  options: { relpos?: string; timeout?: number } = {}
+) {
+  const relpos = options.relpos || 'bottomright';
+  return page.X
+    ._mousemove(
+      selector,
+      relpos,
+      { timeout: options.timeout }
+    )
+    ._click('left')
+    ._key(key, false)
+    .addRequireCheckImmediatelyAfter()
+    .do();
+});
+
+export const autoType = Xdotoolify.setupWithPage(async function(
+  page: XWebDriver,
+  selector: Selector,
+  text: string,
+  options: AutoTypeOptions = {}
+) {
+  const relpos = options.relpos || 'bottomright';
+  const timeout = options.timeout;
+  const overwrite = options.overwrite || false;
+  
+  await page.X
+    ._mousemove(
+      selector,
+      relpos,
+      { timeout }
+    )
+    ._click('left', false, selector)
+    .do();
+    
+  if (overwrite) {
+    await page.X
+      ._key('ctrl+a')
+      .checkUntil(isAllContentSelected, selector, true)
+      ._key('BackSpace')
+      .checkUntil(getInputValue, selector, '')
+      .do();
+  }
+  
+  const lines = text.toString().split('\n');
+  let chain = page.X;
+  for (let i = 0; i < lines.length; ++i) {
+    if (i > 0) {
+      chain = chain._key('Return');
+    }
+    if (i === lines.length - 1) {
+      chain = chain._type(lines[i], false);
+    } else {
+      chain = chain._type(lines[i]);
+    }
+  }
+  
+  return chain.addRequireCheckImmediatelyAfter().do();
 });
 

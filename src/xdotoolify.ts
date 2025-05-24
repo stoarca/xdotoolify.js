@@ -3,7 +3,7 @@ import equal from 'fast-deep-equal';
 
 import { WebDriver } from 'selenium-webdriver';
 
-type Selector = string | [string, number];
+export type Selector = string | [string, number];
 
 // Define specific position types
 interface AbsolutePosition {
@@ -86,7 +86,6 @@ interface MouseMoveOperation extends BaseOperation {
   relpos: string;
   twoStep: boolean;
   timeout: number;
-  skipSamePos?: boolean;
 }
 
 interface ClickOperation extends BaseOperation {
@@ -113,6 +112,13 @@ interface KeyOperation extends BaseOperation {
 interface TypeOperation extends BaseOperation {
   type: 'type';
   text: string;
+}
+
+
+interface MouseMoveOptions {
+  twoStep?: boolean;
+  timeout?: number;
+  checkAfter?: boolean;
 }
 
 // Union of all operation types
@@ -644,10 +650,7 @@ class _Xdotoolify {
   _mousemove(
     selector: Selector | Position,
     relpos?: string,
-    twoStep?: boolean,
-    timeout?: number,
-    checkAfter: boolean = false,
-    skipSamePos: boolean = false
+    options: MouseMoveOptions = {}
   ): this {
     relpos = relpos || 'center';
     if (!RELATIVE_POSITION_MAPPING[relpos.toLowerCase()]) {
@@ -657,10 +660,9 @@ class _Xdotoolify {
       type: 'mousemove',
       selector: selector,
       relpos: relpos.toLowerCase(),
-      twoStep: twoStep || false,
-      timeout: timeout || this.defaultTimeout,
-      checkAfter: checkAfter,
-      skipSamePos: skipSamePos
+      twoStep: options.twoStep || false,
+      timeout: options.timeout || this.defaultTimeout,
+      checkAfter: options.checkAfter || false,
     });
     return this;
   }
@@ -670,15 +672,15 @@ class _Xdotoolify {
     relpos?: string,
     twoStep?: boolean,
     timeout?: number,
-    skipSamePos = false
   ): this {
     return this._mousemove(
       selector,
       relpos,
-      twoStep,
-      timeout,
-      true,
-      skipSamePos
+      {
+        twoStep,
+        timeout,
+        checkAfter: true,
+      }
     );
   }
   _click(
@@ -750,7 +752,7 @@ class _Xdotoolify {
   jitter(): this {
     return this._jitter();
   }
-  _wheeldownWithJitter(checkAfter = false): this {
+  _wheeldown(checkAfter = false): this {
     // In Firefox, if a scroll is done on one element, and then the mouse
     // hovers on another element while still scrolling, there is a short
     // period of time where continued scrolls will apply to the initially
@@ -759,49 +761,26 @@ class _Xdotoolify {
     // jitter of the mouse forces Firefox to apply the next scroll to the
     // newly hovered element immediately, and since this is almost always
     // the expected behavior in tests, you should usually use `scrollWithJitter`.
-    // If there is a case where you need exactly control over the events sent,
-    // use `wheeldownWithoutJitterUnsafe`, but be aware of the above.
 
     this._jitter();
     this._click('wheeldown', checkAfter);
     return this;
   }
 
-  wheeldownWithJitter(): this {
-    return this._wheeldownWithJitter(true);
+  wheeldown(): this {
+    return this._wheeldown(true);
   }
 
-  _wheeldownWithoutJitterUnsafe(checkAfter = false): this {
-    // Scroll without jittering beforehand. See _wheeldownWithJitter for an explanation
-    // of why a jitter is normally required.
-    // If it is needed for a scroll element to produce a deterministic number of
-    // events, this function should be called.
-    this._click('wheeldown', checkAfter);
-    return this;
-  }
-
-  wheeldownWithoutJitterUnsafe(): this {
-    return this._wheeldownWithoutJitterUnsafe(true);
-  }
-
-  _wheelupWithJitter(checkAfter = false): this {
+  _wheelup(checkAfter = false): this {
     this._jitter();
     this._click('wheelup', checkAfter);
     return this;
   }
 
-  wheelupWithJitter(): this {
-    return this._wheelupWithJitter(true);
+  wheelup(): this {
+    return this._wheelup(true);
   }
 
-  _wheelupWithoutJitterUnsafe(checkAfter = false): this {
-    this._click('wheelup', checkAfter);
-    return this;
-  }
-
-  wheelupWithoutJitterUnsafe(): this {
-    return this._wheelupWithoutJitterUnsafe(true);
-  }
   _drag(
     selector: Selector | Position,
     mouseButton?: string,
@@ -809,7 +788,7 @@ class _Xdotoolify {
     checkAfter = false
   ): this {
     this._mousedown(mouseButton);
-    this._mousemove(selector, 'center', true, timeout || this.defaultTimeout);
+    this._mousemove(selector, 'center', { twoStep: true, timeout: timeout || this.defaultTimeout });
     this._mouseup(mouseButton, checkAfter);
     return this;
   }
@@ -851,154 +830,7 @@ class _Xdotoolify {
   type(text: string): this {
     return this._type(text, true);
   }
-  _autoClick(
-    selector: Selector,
-    mouseButton?: string,
-    timeout?: number,
-    checkAfter = false
-  ): this {
-    this._mousemove(
-      selector,
-      undefined,
-      undefined,
-      timeout || this.defaultTimeout,
-      undefined,
-      true
-    );
-    this._click(mouseButton, checkAfter, selector);
-    return this;
-  }
 
-  autoClick(
-    selector: Selector,
-    mouseButton?: string,
-    timeout?: number
-  ): this {
-    return this._autoClick(
-      selector,
-      mouseButton,
-      timeout,
-      true
-    );
-  }
-  _autoDrag(
-    sel1: Selector,
-    sel2: Selector,
-    mouseButton?: string,
-    timeout?: number,
-    checkAfter = false
-  ): this {
-    this._mousemove(
-      sel1,
-      undefined,
-      undefined,
-      timeout || this.defaultTimeout,
-      undefined,
-      true
-    );
-    this._drag(sel2, mouseButton, timeout, checkAfter);
-    return this;
-  }
-
-  autoDrag(
-    sel1: Selector,
-    sel2: Selector,
-    mouseButton?: string,
-    timeout?: number
-  ): this {
-    return this._autoDrag(
-      sel1,
-      sel2,
-      mouseButton,
-      timeout,
-      true
-    );
-  }
-  _autoKey(
-    selector: Selector,
-    key: string,
-    relpos?: string,
-    timeout?: number,
-    checkAfter = false
-  ): this {
-    if (!relpos) {
-      relpos = 'bottomright';
-    }
-    this._mousemove(
-      selector,
-      relpos,
-      undefined,
-      timeout || this.defaultTimeout,
-      undefined,
-      true
-    );
-    this._click('left');
-    this._key(key, checkAfter);
-    return this;
-  }
-
-  autoKey(
-    selector: Selector,
-    key: string,
-    relpos?: string,
-    timeout?: number
-  ): this {
-    return this._autoKey(
-      selector,
-      key,
-      relpos,
-      timeout,
-      true
-    );
-  }
-
-  _autoType(
-    selector: Selector,
-    text: string,
-    relpos?: string,
-    timeout?: number,
-    checkAfter = false
-  ): this {
-    if (!relpos) {
-      relpos = 'bottomright';
-    }
-    this._mousemove(
-      selector,
-      relpos,
-      undefined,
-      timeout || this.defaultTimeout,
-      undefined,
-      true
-    );
-    this._click('left', undefined, selector);
-    const lines = text.toString().split('\n');
-    for (let i = 0; i < lines.length; ++i) {
-      if (i > 0) {
-        this._key('Return');
-      }
-      if (i === lines.length - 1) {
-        this._type(lines[i], checkAfter);
-      } else {
-        this._type(lines[i]);
-      }
-    }
-    return this;
-  }
-
-  autoType(
-    selector: Selector,
-    text: string,
-    relpos?: string,
-    timeout?: number
-  ): this {
-    return this._autoType(
-      selector,
-      text,
-      relpos,
-      timeout,
-      true
-    );
-  }
 
   async do({unsafe = false} = {}): Promise<void> {
     if (unsafe) {
@@ -1274,32 +1106,12 @@ class _Xdotoolify {
                 };
               }, pos);
             }
-            // warn when moving a mouse to the same location
-            if (
-              !this.page.xjsLastPos ||
-                this.page.xjsLastPos.x === pos.x &&
-                this.page.xjsLastPos.y === pos.y
-            ) {
-              if ((op as MouseMoveOperation).skipSamePos) {
-                continue;
-              }
-              throw new Error('The mouse is being moved to the same location twice. ' +
-                'If your intention was to trigger a jitter, please use the "jitter" ' +
-                'command. You may also run mousemove with skipSamePos = true.');
-            }
-            if ((op as MouseMoveOperation).twoStep) {
-              // we issue two mousemove commands because firefox won't start a drag
-              // otherwise. We don't want to always do this because it adds some
-              // noise to the activity screenshots so they become not deterministic
-              var midPoint = {
-                x: (this.page.xjsLastPos.x + pos.x) / 2,
-                y: (this.page.xjsLastPos.y + pos.y) / 2,
-              };
-              commandArr.push(`mousemove --sync ${midPoint.x} ${midPoint.y}`);
-              await this._do(commandArr.join(' '));
-              await _sleep(50);
-              commandArr = [];
-            }
+            // We always add jitter because Firefox does not work correctly
+            // in some cases if the mouse has not moved at all from the
+            // previous operation.
+            commandArr.push(`mousemove --sync ${
+              pos.x > 0 ?  pos.x - 1 : pos.x + 1
+            } ${pos.y}`);
             commandArr.push(`mousemove --sync ${pos.x} ${pos.y}`);
             await this._do(commandArr.join(' '));
             await _sleep(50);
@@ -1319,7 +1131,8 @@ class _Xdotoolify {
 
               try {
                 await this.page.executeScript(() => console.log('adding click handler'));
-                await _addClickHandler(this.page, (op as ClickOperation).selector as Selector, 'click');
+                const eventType = (op as ClickOperation).mouseButton === 3 ? 'contextmenu' : 'click';
+                await _addClickHandler(this.page, (op as ClickOperation).selector as Selector, eventType);
                 await this.page.executeScript(() => console.log('click handler added'));
               } catch (e: any) {
                 throw new Error(e.toString());
@@ -1360,7 +1173,8 @@ class _Xdotoolify {
               commandArr = [];
 
               try {
-                await _addClickHandler(this.page, (op as any).selector, 'mousedown');
+                const eventType = (op as MouseButtonOperation).mouseButton === 3 ? 'contextmenu' : 'mousedown';
+                await _addClickHandler(this.page, (op as any).selector, eventType);
               } catch (e: any) {
                 throw new Error(e.toString());
               }

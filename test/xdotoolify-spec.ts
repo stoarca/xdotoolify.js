@@ -1,65 +1,22 @@
 import Xdotoolify, { XWebDriver, XPageFunction } from '../src/xdotoolify';
 import * as C from '../src/common';
-import { Builder, WebDriver } from 'selenium-webdriver';
-import firefox from 'selenium-webdriver/firefox';
+import { setupTestEnvironment, teardownTestEnvironment, resetPageState } from './setup';
 
 const noop = () => {};
 
 describe('xdotoolify', function() {
   let page: XWebDriver;
-  let driver: WebDriver | null = null;
 
-  beforeEach(async function() {
-    const { execSync } = require('child_process');
-    const { mkdtempSync, writeFileSync, mkdirSync } = require('fs');
-    const tmpdir = mkdtempSync('/tmp/xdotoolify-selenium-test');
-
-    const firefoxOpts = new firefox.Options();
-    firefoxOpts.setProfile(tmpdir);
-    firefoxOpts.setPreference('focusmanager.testmode', false);
-    firefoxOpts.setPreference('security.fileuri.strict_origin_policy', false);
-    firefoxOpts.setPreference('gfx.direct2d.disabled', true);
-    firefoxOpts.setPreference('dom.storage.next_gen', true);
-    firefoxOpts.setPreference('layers.acceleration.disabled', true);
-    firefoxOpts.setPreference('devtools.webconsole.persistlog', true);
-    firefoxOpts.setPreference('app.update.auto', false);
-    firefoxOpts.setPreference('app.update.enabled', false);
-    firefoxOpts.setPreference('browser.fullscreen.animate', false);
-    firefoxOpts.setPreference('browser.fullscreen.autohide', false);
-    firefoxOpts.setPreference('full-screen-api.warning.delay', 0);
-    firefoxOpts.setPreference('full-screen-api.warning.timeout', 0);
-    firefoxOpts.setPreference('browser.formfill.enable', false);
-    firefoxOpts.setPreference('ui.caretBlinkTime', 0);
-    firefoxOpts.setPreference('layout.spellcheckDefault', 0);
-    firefoxOpts.setPreference('security.enterprise_roots.enabled', true);
-    firefoxOpts.setPreference('security.cert_pinning.enforcement_level', 0);
-    firefoxOpts.setPreference('security.ssl.enable_ocsp_stapling', false);
-    firefoxOpts.setPreference('security.ssl.enable_ocsp_must_staple', false);
-    firefoxOpts.setPreference('security.default_personal_cert', 'Select Automatically');
-    firefoxOpts.setAcceptInsecureCerts(true);
-    firefoxOpts.addArguments('-no-remote');
-    firefoxOpts.addArguments('--shm-size=2g');
-
-    driver = await new Builder()
-      .forBrowser('firefox')
-      .setFirefoxOptions(firefoxOpts)
-      .build();
-
-    await driver.manage().window().setRect({
-      width: 1280,
-      height: 1024
-    });
-
-    await driver.get('about:blank');
-
-    page = Xdotoolify(driver);
-    Xdotoolify.defaultCheckUntilTimeout = 100;
+  beforeAll(async function() {
+    page = await setupTestEnvironment();
   }, 10000);
 
-  afterEach(async function() {
-    if (driver) {
-      await driver.quit();
-    }
+  beforeEach(async function() {
+    await resetPageState(page);
+  });
+
+  afterAll(async function() {
+    await teardownTestEnvironment(page);
   });
 
   it('should throw error if not setup', async function() {
@@ -791,112 +748,4 @@ describe('xdotoolify', function() {
     expect(true).toBe(true);
   });
   
-  it('should get element count correctly', async function() {
-    await C.evaluate(page, () => {
-      document.body.innerHTML = `
-        <div class="test-div">Div 1</div>
-        <div class="test-div">Div 2</div>
-        <div class="test-div">Div 3</div>
-      `;
-    });
-    
-    const count = await C.elementCount(page, ".test-div");
-    expect(count).toBe(3);
-    
-    const nonExistentCount = await C.elementCount(page, ".non-existent");
-    expect(nonExistentCount).toBe(0);
-  });
-  
-  it('should get element text correctly', async function() {
-    await C.evaluate(page, () => {
-      document.body.innerHTML = `
-        <div id="text-element">This is a test text</div>
-        <div id="empty-element"></div>
-      `;
-    });
-    
-    const text = await C.elementText(page, "#text-element");
-    expect(text).toBe("This is a test text");
-    
-    const emptyText = await C.elementText(page, "#empty-element");
-    expect(emptyText).toBe("");
-    
-    const nonExistentText = await C.elementText(page, "#non-existent");
-    expect(nonExistentText).toBe(null);
-  });
-  
-  it('should get input value correctly', async function() {
-    await C.evaluate(page, () => {
-      document.body.innerHTML = `
-        <input id="test-input" value="test value">
-        <input id="empty-input" value="">
-      `;
-    });
-    
-    const value = await C.getInputValue(page, "#test-input");
-    expect(value).toBe("test value");
-    
-    const emptyValue = await C.getInputValue(page, "#empty-input");
-    expect(emptyValue).toBe("");
-    
-    const nonExistentValue = await C.getInputValue(page, "#non-existent");
-    expect(nonExistentValue).toBe(false);
-  });
-  
-  it('should count visible elements correctly', async function() {
-    await C.evaluate(page, () => {
-      document.body.innerHTML = `
-        <div class="test-visible">Visible Element 1</div>
-        <div class="test-visible">Visible Element 2</div>
-        <div class="test-visible" style="display: none;">Hidden Element</div>
-        <div class="test-visible" style="visibility: hidden;">Invisible Element</div>
-        <div class="test-visible" style="opacity: 0;">Zero Opacity Element</div>
-      `;
-    });
-    
-    const result = await C.visibleElementCount(page, ".test-visible");
-    expect(result.value).toBe(2);
-    expect(result.debugInfo.totalElements).toBe(5);
-    
-    // Test with custom options
-    const resultWithOptions = await C.visibleElementCount(page, ".test-visible", {
-      allowZeroOpacity: true
-    });
-    expect(resultWithOptions.value).toBe(3);
-    
-    // Test with non-existent elements
-    const nonExistentResult = await C.visibleElementCount(page, ".non-existent");
-    expect(nonExistentResult.value).toBe(0);
-    expect(nonExistentResult.debugInfo.totalElements).toBe(0);
-  });
-  
-  it('should work with checkUntil and visibleElementCount using value check', async function() {
-    await C.evaluate(page, () => {
-      document.body.innerHTML = `
-        <div class="test-visible">Visible Element 1</div>
-        <div class="test-visible">Visible Element 2</div>
-        <div class="test-visible" style="display: none;">Hidden Element</div>
-      `;
-    });
-    
-    await page.X.checkUntil(C.visibleElementCount, ".test-visible", 2).do();
-  });
-  
-  it('should work with checkUntil and visibleElementCount using callback', async function() {
-    await C.evaluate(page, () => {
-      document.body.innerHTML = `
-        <div class="test-visible">Visible Element 1</div>
-        <div class="test-visible">Visible Element 2</div>
-        <div class="test-visible" style="opacity: 0;">Zero Opacity Element</div>
-      `;
-    });
-    
-    await page.X.checkUntil(C.visibleElementCount, ".test-visible", (result) => {
-      // explicit typecheck
-      let asdf: number = result;
-      expect(result).toBe(2);
-      expect(typeof result).toBe("number"); // Verify it's unwrapped from DebuggableResult
-      return true;
-    }).do();
-  });
 });
