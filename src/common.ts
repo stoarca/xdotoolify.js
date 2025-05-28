@@ -333,10 +333,16 @@ export const isAllContentSelected = Xdotoolify.setupWithPage(function(page, sele
   }, selector);
 });
 
+export interface AutoClickOptions {
+  mouseButton?: string;
+  timeout?: number;
+  unsafeIgnoreUnmatchedClick?: boolean;
+}
+
 export const autoClick = Xdotoolify.setupWithPage(function(
   page: XWebDriver,
   selector: Selector,
-  options: { mouseButton?: string; timeout?: number } = {}
+  options: AutoClickOptions = {}
 ) {
   return page.X
     ._mousemove(
@@ -344,7 +350,7 @@ export const autoClick = Xdotoolify.setupWithPage(function(
       undefined,
       { timeout: options.timeout }
     )
-    ._click(options.mouseButton, false, selector)
+    ._click(options.mouseButton, false, selector, options.unsafeIgnoreUnmatchedClick)
     .addRequireCheckImmediatelyAfter()
     .do();
 });

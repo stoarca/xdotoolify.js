@@ -17,7 +17,7 @@ xdotoolify.js/
 ├── test/
 │   └── xdotoolify-spec.ts # Test suite
 ├── Dockerfile             # Test environment with xdotool, Firefox, Xvfb
-├── run-tests.sh          # Test runner script (MUST USE THIS)
+├── test.sh               # Test runner script (MUST USE THIS)
 ├── package.json          # Project configuration
 └── tsconfig.json         # TypeScript configuration
 ```
@@ -29,22 +29,22 @@ Tests MUST be run using the provided script which sets up the required Docker en
 
 Run all tests:
 ```bash
-./run-tests.sh
+./test.sh
 ```
 
 Run a single test (using Jest pattern matching):
 ```bash
-./run-tests.sh -t "detect type errors"
+./test.sh -t "detect type errors"
 ```
 
 Run all tests matching "checkUntil":
 ```bash
-./run-tests.sh -t "checkUntil"
+./test.sh -t "checkUntil"
 ```
 
 Run specific test by exact name:
 ```bash
-./run-tests.sh -t "should detect type errors for incorrect API usage"
+./test.sh -t "should detect type errors for incorrect API usage"
 ```
 
 This script:
@@ -84,7 +84,7 @@ npm run typecheck
 
 ## Code Style Guidelines
 - Use TypeScript strict mode
-- Avoid adding comments that describe what code does (only explain why)
+- NEVER add explanatory comments
 - Follow existing patterns for operation methods
 - Ensure all new methods have proper type definitions
 - Add test coverage for new features

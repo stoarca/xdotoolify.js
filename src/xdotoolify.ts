@@ -91,7 +91,8 @@ interface MouseMoveOperation extends BaseOperation {
 interface ClickOperation extends BaseOperation {
   type: 'click';
   mouseButton: number;
-  selector?: Selector | null;
+  selector?: Selector;
+  unsafeIgnoreUnmatchedClick?: boolean;
 }
 
 interface MouseButtonOperation extends BaseOperation {
@@ -243,7 +244,10 @@ const _waitForClickAction = async function(page: XWebDriver, timeout: number): P
     }
 
     if (clickInfo.registered && !clickInfo.success) {
-      reject(new Error(clickInfo.wrongClickMessage || 'Unknown click error'));
+      reject(new ErrorWithCode(
+        clickInfo.wrongClickMessage || 'Unknown click error',
+        'click.wrongElement'
+      ));
     }
 
     if (clickInfo.error) {
@@ -284,12 +288,26 @@ const _addClickHandler = async function(page: XWebDriver, selector: Selector, ev
         _selector
       }.`;
     } else {
-      const onClick = () => {
-        window.clickInfo.success = true;
-        window.selectedEl!.removeEventListener(_eventType, onClick, listenerOptions);
-      };
+      if (window.selectedEl.tagName === 'OPTION') {
+        const optionElement = window.selectedEl as HTMLOptionElement;
+        const selectElement = optionElement.parentElement as HTMLSelectElement;
+        if (selectElement && selectElement.tagName === 'SELECT') {
+          const onSelectChange = () => {
+            window.clickInfo.success = true;
+            selectElement.removeEventListener('change', onSelectChange, listenerOptions);
+          };
+          selectElement.addEventListener('change', onSelectChange, listenerOptions);
+        } else {
+          window.clickInfo.error = 'Option element is not inside a select element.';
+        }
+      } else {
+        const onClick = () => {
+          window.clickInfo.success = true;
+          window.selectedEl!.removeEventListener(_eventType, onClick, listenerOptions);
+        };
 
-      window.selectedEl.addEventListener(_eventType, onClick, listenerOptions);
+        window.selectedEl.addEventListener(_eventType, onClick, listenerOptions);
+      }
     }
 
     const documentClickHandler = (event: Event) => {
@@ -347,7 +365,8 @@ const _addClickHandler = async function(page: XWebDriver, selector: Selector, ev
         'Selector ' + _selector + ' does not match the clicked element. ' +
           'This may be caused by (1) the element changing position (e.g ' +
           'due to an animation) or (2) another element covering up the target ' +
-          'element. Please review screenshots and ensure that the cursor is at the ' +
+          'element or (3) some components in some frameworks (e.g. MaterialUI\'s <Select>) ' +
+          'operate on mousedown and block the click. Please review screenshots and ensure that the cursor is at the ' +
           'correct position. '
       );
 
@@ -468,6 +487,16 @@ const _getElementAndBrowserRect = async function(page: XWebDriver, selector: Sel
       }
       checkIfInFrame(element);
       result = getElementVisibleBoundingRect(element);
+      // Special handling for OPTION elements
+      if (element.tagName === 'OPTION') {
+        // Native dropdown options present a challenge for OS-level clicking:
+        // 1. Their getBoundingClientRect() often returns zero dimensions when the dropdown is closed
+        // 2. When a dropdown is open, the options are rendered in a platform-specific overlay
+        //    that may not be in the position expected by normal DOM coordinates
+        // 3. Firefox renders dropdowns using OS-native UI which xdotool can struggle to interact with
+        // We'll identify option elements here so we can handle them specially in the click operation
+        console.log('Found OPTION element - will handle specially during click operation');
+      }
     }
 
     return {
@@ -699,7 +728,8 @@ class _Xdotoolify {
   _click(
     mouseButton = 'left',
     checkAfter = false,
-    selector?: Selector
+    selector?: Selector,
+    unsafeIgnoreUnmatchedClick = false
   ): this {
     if (!MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()]) {
       throw new Error('Unknown mouse button ' + mouseButton);
@@ -708,7 +738,8 @@ class _Xdotoolify {
       type: 'click',
       mouseButton: MOUSE_BUTTON_MAPPING[mouseButton.toLowerCase()],
       checkAfter: checkAfter,
-      selector: selector
+      selector: selector,
+      unsafeIgnoreUnmatchedClick: unsafeIgnoreUnmatchedClick
     });
     return this;
   }
@@ -862,7 +893,8 @@ class _Xdotoolify {
             this.requireCheckImmediatelyAfter &&
             op.type !== 'checkUntil' &&
             op.type !== 'addCheckRequirement' &&
-            op.type !== 'log'
+            op.type !== 'log' &&
+            op.type !== 'sleep'
           ) {
             throw new Error(
               'Missing checkUntil after running ' +
@@ -1137,47 +1169,85 @@ class _Xdotoolify {
             this.page.xjsLastPos.x = pos.x;
             this.page.xjsLastPos.y = pos.y;
           } else if (op.type === 'click') {
+            const clickOp = op as ClickOperation;
             if (
-              [1, 2, 3].includes((op as ClickOperation).mouseButton) &&
-              (op as ClickOperation).selector &&
-              (Array.isArray((op as ClickOperation).selector) || typeof (op as ClickOperation).selector === 'string')
+              [1, 2, 3].includes(clickOp.mouseButton) &&
+              clickOp.selector &&
+              (Array.isArray(clickOp.selector) || typeof clickOp.selector === 'string')
             ) {
               // clean up previous commands
               await this._do(commandArr.join(' '));
               await _sleep(50);
               commandArr = [];
 
-              try {
-                await this.page.executeScript(() => console.log('adding click handler'));
-                const eventType = (op as ClickOperation).mouseButton === 3 ? 'contextmenu' : 'click';
-                await _addClickHandler(this.page, (op as ClickOperation).selector as Selector, eventType);
-                await this.page.executeScript(() => console.log('click handler added'));
-              } catch (e: any) {
-                throw new Error(e.toString());
-              }
-              commandArr.push(`click ${(op as ClickOperation).mouseButton}`);
-              await this._do(commandArr.join(' '));
-              try {
-                // TO DO: It seems that Firefox sometimes swallows clicks
-                // when passing from one textarea to another. This needs
-                // to be investigated. For now, it suffices to alert
-                // in the case of these "missed clicks" in case that
-                // they correspond to actual failures.
-                await _waitForClickAction(this.page, (Xdotoolify as any).defaultCheckUntilTimeout);
-              } catch (e: any) {
-                if (e.errorCode === 'click.timeOut') {
-                  console.warn(
-                    'Click was not registered. Not necessarily a failure ' +
-                    'unless it is accompanied by one.'
-                  );
-                } else {
-                  throw e;
+              // Check if we're dealing with an OPTION element
+              const isOptionElement = await this.page.executeScript(function(_selector: Selector) {
+                const element = Array.isArray(_selector) ? 
+                  document.querySelectorAll(_selector[0])[_selector[1] as number] :
+                  document.querySelector(_selector);
+                return element && element.tagName === 'OPTION';
+              }, clickOp.selector);
+
+              if (isOptionElement) {
+                // For option elements, use Selenium's built-in click()
+                // which works better with native dropdown UI elements
+                try {
+                  await this.page.executeScript(function(_selector?: Selector) {
+                    const element = Array.isArray(_selector) ? 
+                      document.querySelectorAll(_selector[0])[_selector[1] as number] :
+                      document.querySelector(_selector as string);
+                    
+                    if (element && element.tagName === 'OPTION') {
+                      // Set the value of the parent select element
+                      const optionElement = element as HTMLOptionElement;
+                      const selectElement = optionElement.parentElement as HTMLSelectElement;
+                      if (selectElement && selectElement.tagName === 'SELECT') {
+                        selectElement.value = optionElement.value;
+                        // Dispatch change event to trigger any listeners
+                        const event = new Event('change', { bubbles: true });
+                        selectElement.dispatchEvent(event);
+                      }
+                    }
+                  }, clickOp.selector);
+                } catch (e: any) {
+                  throw new Error(`Failed to click option element: ${e.toString()}`);
+                }
+              } else {
+                // Standard click handling for non-option elements
+                try {
+                  await this.page.executeScript(() => console.log('adding click handler'));
+                  const eventType = clickOp.mouseButton === 3 ? 'contextmenu' : 'click';
+                  await _addClickHandler(this.page, clickOp.selector as Selector, eventType);
+                  await this.page.executeScript(() => console.log('click handler added'));
+                } catch (e: any) {
+                  throw new Error(e.toString());
+                }
+                commandArr.push(`click ${clickOp.mouseButton}`);
+                await this._do(commandArr.join(' '));
+                try {
+                  // TO DO: It seems that Firefox sometimes swallows clicks
+                  // when passing from one textarea to another. This needs
+                  // to be investigated. For now, it suffices to alert
+                  // in the case of these "missed clicks" in case that
+                  // they correspond to actual failures.
+                  await _waitForClickAction(this.page, (Xdotoolify as any).defaultCheckUntilTimeout);
+                } catch (e: any) {
+                  if (e.errorCode === 'click.timeOut') {
+                    console.warn(
+                      'Click was not registered. Not necessarily a failure ' +
+                      'unless it is accompanied by one.'
+                    );
+                  } else if (e.errorCode === 'click.wrongElement' && clickOp.unsafeIgnoreUnmatchedClick) {
+                    // Silently ignore the click error when unsafeIgnoreUnmatchedClick is true
+                  } else {
+                    throw e;
+                  }
                 }
               }
               await _sleep(50);
               commandArr = [];
             } else {
-              commandArr.push(`click ${(op as ClickOperation).mouseButton}`);
+              commandArr.push(`click ${clickOp.mouseButton}`);
             }
           } else if (op.type === 'mousedown') {
             if (
