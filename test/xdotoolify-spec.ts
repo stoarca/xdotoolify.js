@@ -747,5 +747,48 @@ describe('xdotoolify', function() {
     
     expect(true).toBe(true);
   });
+
+  it('should be able to log messages in operation chain', async function() {
+    const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
+    
+    const testMessage = 'Test log message';
+    const testObject = { test: 'value', number: 42 };
+    
+    await page.X
+      .log(testMessage)
+      .log(testObject)
+      .do();
+    
+    expect(mockConsoleLog).toHaveBeenCalledWith(testMessage);
+    expect(mockConsoleLog).toHaveBeenCalledWith(testObject);
+    expect(mockConsoleLog).toHaveBeenCalledTimes(2);
+    
+    // Test that log() is allowed after run() that requires check
+    const goodFunc = Xdotoolify.setupWithPage((page) => 5);
+    const fnWithRequire = Xdotoolify.setupWithPage(
+      async page => {
+        await page.X
+            .addRequireCheckImmediatelyAfter().do();
+      }
+    );
+    
+    await page.X
+        .run(fnWithRequire)
+        .log('This should be allowed')
+        .checkUntil(goodFunc, 5)
+        .do();
+    
+    expect(mockConsoleLog).toHaveBeenCalledWith('This should be allowed');
+    
+    // Test that check is still required after .run().log()
+    await expect(async () => {
+      await page.X
+          .run(fnWithRequire)
+          .log('Log message')
+          .do();
+    }).rejects.toThrow('Missing checkUntil after running \'requireCheckImmediatelyAfter\'');
+    
+    mockConsoleLog.mockRestore();
+  });
   
 });
