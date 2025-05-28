@@ -114,6 +114,10 @@ interface TypeOperation extends BaseOperation {
   text: string;
 }
 
+interface LogOperation extends BaseOperation {
+  type: 'log';
+  message: any;
+}
 
 interface MouseMoveOptions {
   twoStep?: boolean;
@@ -132,7 +136,8 @@ type Operation =
   | MouseButtonOperation
   | JitterOperation
   | KeyOperation
-  | TypeOperation;
+  | TypeOperation
+  | LogOperation;
 
 // Element rectangle interface
 interface ElementAndBrowserRect {
@@ -611,6 +616,14 @@ class _Xdotoolify {
     });
     return this;
   }
+  log(message: any): this {
+    this._addOperation({
+      type: 'log',
+      message: message,
+      checkAfter: false,
+    });
+    return this;
+  }
   run<P extends any[], R>(
     f: XPageFunction<P, R> | XNoPageFunction<P, R>,
     ...rest: [...P]
@@ -848,7 +861,8 @@ class _Xdotoolify {
           if (
             this.requireCheckImmediatelyAfter &&
             op.type !== 'checkUntil' &&
-            op.type !== 'addCheckRequirement'
+            op.type !== 'addCheckRequirement' &&
+            op.type !== 'log'
           ) {
             throw new Error(
               'Missing checkUntil after running ' +
@@ -861,6 +875,10 @@ class _Xdotoolify {
             await this._do(commandArr.join(' '));
             commandArr = [];
             await _sleep(op.ms!);
+          } else if (op.type === 'log') {
+            await this._do(commandArr.join(' '));
+            commandArr = [];
+            console.log(op.message);
           } else if (op.type === 'addCheckRequirement') {
             this.requireCheckImmediatelyAfter = true;
           } else if (op.type === 'run' || op.type === 'checkUntil') {
