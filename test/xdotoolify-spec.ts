@@ -790,5 +790,142 @@ describe('xdotoolify', function() {
     
     mockConsoleLog.mockRestore();
   });
+
+  it('should be able to click on standard system dropdowns and select options', async function() {
+    await page.executeScript(function() {
+      document.body.innerHTML = `
+        <div style="padding: 50px;">
+          <label for="test-dropdown">Choose an option:</label>
+          <select id="test-dropdown" style="font-size: 16px; padding: 8px; margin: 10px;">
+            <option value="">-- Select an option --</option>
+            <option value="apple">Apple</option>
+            <option value="banana">Banana</option>
+            <option value="cherry">Cherry</option>
+            <option value="date">Date</option>
+          </select>
+          <p id="selected-value">Selected: <span id="selection-display">None</span></p>
+        </div>
+      `;
+      
+      const dropdown = document.getElementById('test-dropdown') as HTMLSelectElement;
+      const display = document.getElementById('selection-display') as HTMLElement;
+      
+      dropdown.addEventListener('change', function() {
+        const selectedText = dropdown.options[dropdown.selectedIndex].text;
+        display.textContent = selectedText;
+      });
+    });
+
+    const getSelectedValue = Xdotoolify.setupWithPage((page) => {
+      return page.executeScript(function() {
+        const dropdown = document.getElementById('test-dropdown') as HTMLSelectElement;
+        return dropdown.value;
+      });
+    });
+
+    const getSelectedText = Xdotoolify.setupWithPage((page) => {
+      return page.executeScript(function() {
+        const display = document.getElementById('selection-display') as HTMLElement;
+        return display.textContent;
+      });
+    });
+
+    await page.X
+      .run(C.autoClick, '#test-dropdown')
+      .checkUntil(getSelectedValue, '')
+      .run(C.autoClick, 'option[value="banana"]')
+      .checkUntil(getSelectedValue, 'banana')
+      .checkUntil(getSelectedText, 'Banana')
+      .do();
+  });
+  
+  it('should handle click with no selector', async function() {
+    await page.executeScript(function() {
+      document.body.innerHTML = `
+        <div id="click-area" style="width: 100%; height: 300px; background-color: #f0f0f0;">
+          Click anywhere in this area
+        </div>
+        <div id="click-status">No click detected</div>
+      `;
+      
+      document.addEventListener('click', function() {
+        const statusElement = document.getElementById('click-status');
+        if (statusElement) {
+          statusElement.textContent = 'Click detected';
+        }
+      });
+    });
+    
+    await page.X
+      // Move to a known location first
+      .mousemove('#click-area')
+      .checkUntil(Xdotoolify.setupWithPage(page => true), true)
+      // Then click without a selector (should click at current mouse position)
+      .click()
+      .checkUntil(C.elementText, '#click-status', 'Click detected')
+      .do();
+  });
+  
+  it('should detect when click is blocked by a parent element', async function() {
+    await page.executeScript(function() {
+      document.body.innerHTML = `
+        <div id="mousedown-test-container">
+          <button id="target-button">Click me (parent blocks click)</button>
+          <div id="mousedown-status">No action detected</div>
+        </div>
+      `;
+      
+      const container = document.getElementById('mousedown-test-container');
+      const button = document.getElementById('target-button');
+      const status = document.getElementById('mousedown-status');
+      
+      if (container && button && status) {
+        button.addEventListener('mousedown', function(e) {
+          status.textContent = 'Mousedown detected';
+        });
+        
+        container.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }, true);
+      }
+    });
+    
+    const getStatus = Xdotoolify.setupWithPage((page) => {
+      return page.executeScript(function() {
+        const statusEl = document.getElementById('mousedown-status');
+        return statusEl ? statusEl.textContent : null;
+      });
+    });
+    
+    let errorMessage = '';
+    try {
+      await page.X
+        .run(C.autoClick, '#target-button')
+        .checkUntil(getStatus, 'Mousedown detected')
+        .do();
+    } catch (e: any) {
+      errorMessage = e.toString();
+    }
+    
+    expect(errorMessage).toContain('Selector #target-button does not match the clicked element');
+    expect(errorMessage).toContain('This may be caused by (1) the element changing position');
+    expect(errorMessage).toContain('or (3) some components in some frameworks');
+    
+    const status = await getStatus(page);
+    expect(status).toBe('Mousedown detected');
+    
+    await page.executeScript(function() {
+      const status = document.getElementById('mousedown-status');
+      if (status) {
+        status.textContent = 'No action detected';
+      }
+    });
+    
+    await page.X
+      .run(C.autoClick, '#target-button', { unsafeIgnoreUnmatchedClick: true })
+      .checkUntil(getStatus, 'Mousedown detected')
+      .do();
+  });
   
 });
