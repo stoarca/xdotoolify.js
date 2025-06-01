@@ -435,3 +435,33 @@ export const autoType = Xdotoolify.setupWithPage(async function(
   return chain.addRequireCheckImmediatelyAfter().do();
 });
 
+export const showConsole = Xdotoolify.setupWithPage(async function(page: XWebDriver) {
+  const rect = await page.manage().window().getRect();
+  
+  // 250px is the height of the console - adding this keeps the webpage size exactly the same
+  await page.manage().window().setRect({
+    width: rect.width,
+    height: rect.height + 250
+  });
+  
+  await page.X
+    ._key('ctrl+shift+k')
+    .checkUntil(Xdotoolify.setupWithPage(() => true), true)
+    .do();
+});
+
+export const hideConsole = Xdotoolify.setupWithPage(async function(page: XWebDriver) {
+  const rect = await page.manage().window().getRect();
+  
+  await page.X
+    ._key('ctrl+shift+k')
+    .checkUntil(Xdotoolify.setupWithPage(() => true), true)
+    .do();
+    
+  // 250px is the height of the console - removing this returns the webpage to its original size
+  await page.manage().window().setRect({
+    width: rect.width,
+    height: rect.height - 250
+  });
+});
+
