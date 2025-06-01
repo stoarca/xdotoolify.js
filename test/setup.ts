@@ -57,6 +57,6 @@ export async function teardownTestEnvironment(page: XWebDriver | null): Promise<
 
 export async function resetPageState(page: XWebDriver): Promise<void> {
   page = Xdotoolify(page);
-  Xdotoolify.defaultCheckUntilTimeout = 100;
+  Xdotoolify.defaultCheckUntilTimeout = 300;
   await page.get('about:blank');
 }

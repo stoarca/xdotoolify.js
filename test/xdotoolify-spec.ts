@@ -839,6 +839,23 @@ describe('xdotoolify', function() {
       .do();
   });
   
+  it('should retry when checkUntil function throws an error', async function() {
+    let callCount = 0;
+    const funcThatEventuallySucceeds = Xdotoolify.setupWithPage((page) => {
+      callCount++;
+      if (callCount < 3) {
+        throw new Error('Function error ' + callCount);
+      }
+      return 'success';
+    });
+
+    await page.X
+      .checkUntil(funcThatEventuallySucceeds, 'success')
+      .do();
+
+    expect(callCount).toBe(3);
+  });
+
   it('should handle click with no selector', async function() {
     await page.executeScript(function() {
       document.body.innerHTML = `

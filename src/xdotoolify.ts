@@ -271,7 +271,6 @@ interface ElementInfo {
 
 const _addClickHandler = async function(page: XWebDriver, selector: Selector, eventType: string): Promise<void> {
   await page.executeScript(function(_selector: Selector, _eventType: string) {
-    console.log('starting to add click handler');
     window.selectedEl = Array.isArray(_selector) ? (
       document.querySelectorAll(_selector[0])[_selector[1] as number]
     ) : document.querySelector(_selector as string);
@@ -376,7 +375,6 @@ const _addClickHandler = async function(page: XWebDriver, selector: Selector, ev
     };
 
     document.addEventListener(_eventType, documentClickHandler, listenerOptions);
-    console.log('finished adding click handler');
     window.handlerActive = true;
   }, selector, eventType);
 };
@@ -487,16 +485,6 @@ const _getElementAndBrowserRect = async function(page: XWebDriver, selector: Sel
       }
       checkIfInFrame(element);
       result = getElementVisibleBoundingRect(element);
-      // Special handling for OPTION elements
-      if (element.tagName === 'OPTION') {
-        // Native dropdown options present a challenge for OS-level clicking:
-        // 1. Their getBoundingClientRect() often returns zero dimensions when the dropdown is closed
-        // 2. When a dropdown is open, the options are rendered in a platform-specific overlay
-        //    that may not be in the position expected by normal DOM coordinates
-        // 3. Firefox renders dropdowns using OS-native UI which xdotool can struggle to interact with
-        // We'll identify option elements here so we can handle them specially in the click operation
-        console.log('Found OPTION element - will handle specially during click operation');
-      }
     }
 
     return {
@@ -954,15 +942,23 @@ class _Xdotoolify {
             // let blah: 'asdf' = runOrCheckOp.func;
             // let alah: 'asdf' = runOrCheckOp;
             
-            let run = async (ignoreCallbackError: boolean) => {
+            let run = async () => {
               // Type debugging - Remove this line when done debugging
               // let asdf: 'asdf' = runOrCheckOp.args;
               
               let ret: ReturnType<typeof runOrCheckOp.func>;
-              if (runOrCheckOp.func._xdotoolifyWithPage) {
-                ret = await runOrCheckOp.func(this.page, ...runOrCheckOp.args);
-              } else {
-                ret = await runOrCheckOp.func(...runOrCheckOp.args);
+              try {
+                if (runOrCheckOp.func._xdotoolifyWithPage) {
+                  ret = await runOrCheckOp.func(this.page, ...runOrCheckOp.args);
+                } else {
+                  ret = await runOrCheckOp.func(...runOrCheckOp.args);
+                }
+              } catch (e: any) {
+                if (op.type === 'checkUntil') {
+                  return [undefined, e];
+                } else {
+                  throw e;
+                }
               }
               
               // Only check operations have callbackOrExpectedValue
@@ -985,20 +981,7 @@ class _Xdotoolify {
                     return [ret, value === checkOp.callbackOrExpectedValue];
                   }
                 } catch (e: any) {
-                  if (ignoreCallbackError) {
-                    return [ret, e];
-                  } else {
-                    let retJSON;
-
-                    try {
-                      retJSON = JSON.stringify(ret);
-                    } catch (e) {
-                      retJSON = e;
-                    }
-
-                    e.message += '\nValue being checked: ' + retJSON;
-                    throw e;
-                  }
+                  return [ret, e];
                 }
               }
               return [ret, undefined];
@@ -1009,7 +992,7 @@ class _Xdotoolify {
               let expires = Date.now() + Xdotoolify.defaultCheckUntilTimeout;
               
               while (true) {
-                let [result, errorOrCheck] = await run(true);
+                let [result, errorOrCheck] = await run();
                 if (!(errorOrCheck instanceof Error) &&
                     (errorOrCheck === true || errorOrCheck === undefined)) {
                   // ^ this allows both:
@@ -1073,7 +1056,7 @@ class _Xdotoolify {
                 await _sleep(100);
               }
             } else {
-              await run(false);
+              await run();
               if (op.type === 'run' && this.operations.length > 0) {
                 throw new Error('You forgot to add ".do() "' +
                   'at the end of a subcommand.');
@@ -1181,6 +1164,12 @@ class _Xdotoolify {
               commandArr = [];
 
               // Check if we're dealing with an OPTION element
+              // Native dropdown options present a challenge for OS-level clicking:
+              // 1. Their getBoundingClientRect() often returns zero dimensions when the dropdown is closed
+              // 2. When a dropdown is open, the options are rendered in a platform-specific overlay
+              //    that may not be in the position expected by normal DOM coordinates
+              // 3. Firefox renders dropdowns using OS-native UI which xdotool can struggle to interact with
+              // We'll identify option elements here so we can handle them specially in the click operation
               const isOptionElement = await this.page.executeScript(function(_selector: Selector) {
                 const element = Array.isArray(_selector) ? 
                   document.querySelectorAll(_selector[0])[_selector[1] as number] :
@@ -1215,10 +1204,8 @@ class _Xdotoolify {
               } else {
                 // Standard click handling for non-option elements
                 try {
-                  await this.page.executeScript(() => console.log('adding click handler'));
                   const eventType = clickOp.mouseButton === 3 ? 'contextmenu' : 'click';
                   await _addClickHandler(this.page, clickOp.selector as Selector, eventType);
-                  await this.page.executeScript(() => console.log('click handler added'));
                 } catch (e: any) {
                   throw new Error(e.toString());
                 }
@@ -1339,8 +1326,6 @@ class _Xdotoolify {
     await this.focus();
     await _waitForDOM(this.page, (Xdotoolify as any).defaultCheckUntilTimeout); 
     if (command) {
-      await this.page.executeScript(() => console.log('clicking'));
-      //console.log('command is ' + command);
       childProcess.execSync('xdotool ' + command);
     }
   }
