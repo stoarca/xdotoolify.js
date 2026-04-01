@@ -328,6 +328,13 @@ export const isAllContentSelected = Xdotoolify.setupWithPage(function(page, sele
       return selectionLength === inputEl.value.length;
     }
 
+    if (el.tagName === 'TEXTAREA') {
+      const textareaEl = el as HTMLTextAreaElement;
+      // Firefox getSelection returns an empty string for textareas (same bug as inputs)
+      const selectionLength = (textareaEl.selectionEnd || 0) - (textareaEl.selectionStart || 0);
+      return selectionLength === textareaEl.value.length;
+    }
+
     const selectionText = document.getSelection()?.toString() || '';
     return (el as HTMLElement).innerText === selectionText;
   }, selector);

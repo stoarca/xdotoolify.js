@@ -9,7 +9,7 @@ describe('xdotoolify', function() {
 
   beforeAll(async function() {
     page = await setupTestEnvironment();
-  }, 10000);
+  }, 30000);
 
   beforeEach(async function() {
     await resetPageState(page);
@@ -17,7 +17,7 @@ describe('xdotoolify', function() {
 
   afterAll(async function() {
     await teardownTestEnvironment(page);
-  });
+  }, 30000);
 
   it('should throw error if not setup', async function() {
     let errorMsg = 'No error thrown';
