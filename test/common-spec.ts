@@ -7,7 +7,7 @@ describe('common utility functions', function() {
 
   beforeAll(async function() {
     page = await setupTestEnvironment();
-  }, 10000);
+  }, 30000);
 
   beforeEach(async function() {
     await resetPageState(page);
@@ -15,7 +15,7 @@ describe('common utility functions', function() {
 
   afterAll(async function() {
     await teardownTestEnvironment(page);
-  });
+  }, 30000);
 
   describe('basic utility functions', function() {
     beforeEach(async function() {

@@ -159,6 +159,12 @@ interface ClickInfo {
   wrongClickMessage?: string;
 }
 
+interface MousemoveInfo {
+  registered: boolean;
+  error: string | null;
+  target: ElementInfo[] | null;
+}
+
 // Custom error class with error code
 class ErrorWithCode extends Error {
   errorCode?: string;
@@ -175,8 +181,10 @@ declare global {
     mozInnerScreenX: number;
     mozInnerScreenY: number;
     clickInfo: ClickInfo;
+    mousemoveInfo: MousemoveInfo;
     selectedEl: Element | null;
     handlerActive: boolean;
+    handlerActiveMousemove: boolean;
   }
 }
 
@@ -262,12 +270,97 @@ const _waitForClickAction = async function(page: XWebDriver, timeout: number): P
   });
 };
 
+// Shared ancestry helper — serialized as a string so it can be passed to
+// browser-side executeScript in both click and mousemove handlers.
+const _getAncestryStr = `function(el) {
+  var ancestry = [{
+    classes: el.classList,
+    tagName: el.tagName,
+    id: el.id,
+    dataTest: el.getAttribute('data-test')
+  }];
+  var currentEl = el.parentNode;
+  while (currentEl && currentEl.parentNode) {
+    ancestry.push({
+      classes: currentEl.classList,
+      tagName: currentEl.tagName,
+      id: currentEl.id,
+      dataTest: currentEl.getAttribute('data-test')
+    });
+    currentEl = currentEl.parentNode;
+  }
+  return ancestry.reverse();
+}`;
+
 interface ElementInfo {
   classes: DOMTokenList;
   tagName: string;
   id: string;
   dataTest: string | null;
 }
+
+const _waitForMousemoveAction = async function(
+  page: XWebDriver,
+  timeout: number
+): Promise<void> {
+  let expires = Date.now() + timeout;
+
+  let mousemoveInfo: MousemoveInfo | undefined;
+  while (Date.now() < expires) {
+    mousemoveInfo = await page.executeScript(function() {
+      return window.mousemoveInfo;
+    });
+    if (!mousemoveInfo || mousemoveInfo.registered) { break; }
+    await _sleep(50);
+  }
+  if (!mousemoveInfo) {
+    return;
+  }
+  if (!mousemoveInfo.registered) {
+    throw new ErrorWithCode(
+      'Timed out while waiting for mousemove to be registered.',
+      'mousemove.timeOut'
+    );
+  }
+};
+
+const _addMousemoveHandler = async function(
+  page: XWebDriver
+): Promise<void> {
+  await page.executeScript(function(_getAncestryStr: string) {
+    const getAncestry = new Function('return ' + _getAncestryStr)();
+
+    window.mousemoveInfo = {
+      registered: false,
+      error: null,
+      target: null
+    };
+
+    const listenerOptions = {once: true, capture: true};
+
+    const documentMousemoveHandler = (event: Event) => {
+      window.handlerActiveMousemove = false;
+      window.mousemoveInfo.registered = true;
+
+      const {target} = event;
+      let ancestry: any[] = [];
+
+      try {
+        ancestry = getAncestry(target);
+      } catch (e) {
+        console.error(e);
+      }
+
+      window.mousemoveInfo.target = ancestry;
+      // Note: listener auto-removes via {once: true}
+    };
+
+    document.addEventListener(
+      'mousemove', documentMousemoveHandler, listenerOptions
+    );
+    window.handlerActiveMousemove = true;
+  }, _getAncestryStr);
+};
 
 const _addClickHandler = async function(page: XWebDriver, selector: Selector, eventType: string): Promise<void> {
   await page.executeScript(function(_selector: Selector, _eventType: string) {
@@ -1139,6 +1232,9 @@ class _Xdotoolify {
                 };
               }, pos);
             }
+            // Inject mousemove event listener before executing the move
+            await _addMousemoveHandler(this.page);
+
             // We always add jitter because Firefox does not work correctly
             // in some cases if the mouse has not moved at all from the
             // previous operation.
@@ -1149,6 +1245,25 @@ class _Xdotoolify {
             await this._do(commandArr.join(' '));
             await _sleep(50);
             commandArr = [];
+
+            // Verify the mousemove event was registered
+            try {
+              await _waitForMousemoveAction(
+                this.page,
+                (Xdotoolify as any).defaultCheckUntilTimeout
+              );
+            } catch (e: any) {
+              if (e.errorCode === 'mousemove.timeOut') {
+                console.warn(
+                  'Mousemove to (' + pos.x + ', ' + pos.y + ') was not ' +
+                  'registered. Not necessarily a failure unless it is ' +
+                  'accompanied by one.'
+                );
+              } else {
+                throw e;
+              }
+            }
+
             this.page.xjsLastPos.x = pos.x;
             this.page.xjsLastPos.y = pos.y;
           } else if (op.type === 'click') {
