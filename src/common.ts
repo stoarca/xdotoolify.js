@@ -284,6 +284,25 @@ export const elementText = Xdotoolify.setupWithPage(function(page, selector: Sel
   }, selector);
 });
 
+export const elementExists = Xdotoolify.setupWithPage(async function(page, selector: Selector) {
+  const result = await evaluate(page, function(_selector: Selector) {
+    let list: NodeListOf<Element>;
+    if (Array.isArray(_selector)) {
+      list = document.querySelectorAll(_selector[0]);
+      return list.length > _selector[1];
+    } else {
+      list = document.querySelectorAll(_selector);
+      return list.length > 0;
+    }
+  }, selector);
+  return result;
+});
+
+export const elementDoesNotExist = Xdotoolify.setupWithPage(async function(page, selector: Selector) {
+  const exists = await elementExists(page, selector);
+  return !exists;
+});
+
 export const isElementActive = Xdotoolify.setupWithPage(function(page, selector: Selector) {
   return evaluate(page, function(_selector: Selector) {
     let el: Element | null;
